@@ -10,13 +10,15 @@
       "title": "Google OAuth Client ID",
       "description": "OAuth 2.0 Client ID from Google Cloud Console",
       "type": "string",
-      "sensitive": false
+      "sensitive": false,
+      "required": true
     },
     "google_oauth_client_secret": {
       "title": "Google OAuth Client Secret",
       "description": "OAuth 2.0 Client Secret from Google Cloud Console",
       "type": "string",
-      "sensitive": true
+      "sensitive": true,
+      "required": true
     }
   },
   "mcpServers": {
