@@ -53,6 +53,7 @@ VALID_SERVICES = frozenset({
 
 
 def safe_print(text):
+    """Print to stderr, falling back to debug logging when running as an MCP server."""
     # Don't print to stderr when running as MCP server via uvx to avoid JSON parsing errors
     # Check if we're running as MCP server (no TTY and uvx in process name)
     if not sys.stderr.isatty():
@@ -67,6 +68,7 @@ def safe_print(text):
 
 
 def configure_safe_logging():
+    """Replace console handlers with ASCII-safe formatters for Windows compatibility."""
     class SafeEnhancedFormatter(EnhancedLogFormatter):
         """Enhanced ASCII formatter with additional Windows safety."""
 
