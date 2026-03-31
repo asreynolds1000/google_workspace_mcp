@@ -992,15 +992,24 @@ async def _fetch_cell_formulas(
             resolved_range,
             exc,
         )
-        return ""
+        raise exc
 
     formula_values = result.get("values", [])
     formulas: list[dict[str, str]] = []
-    for row_idx, formula_row in enumerate(formula_values, 1):
+
+    _, range_part = _split_sheet_and_range(resolved_range)
+    start_part = range_part.split(":")[0] if ":" in range_part else range_part
+    start_col_idx, start_row_idx = _parse_a1_part(start_part)
+    start_col = start_col_idx if start_col_idx is not None else 0
+    start_row = start_row_idx if start_row_idx is not None else 0
+
+    for row_idx, formula_row in enumerate(formula_values):
         for col_idx, cell_value in enumerate(formula_row):
             if isinstance(cell_value, str) and cell_value.startswith("="):
-                col_label = _index_to_column(col_idx)
-                formulas.append({"cell": f"{col_label}{row_idx}", "formula": cell_value})
+                actual_col = start_col + col_idx
+                actual_row = start_row + row_idx + 1
+                col_label = _index_to_column(actual_col)
+                formulas.append({"cell": f"{col_label}{actual_row}", "formula": cell_value})
 
     return _format_sheet_formula_section(formulas=formulas, range_label=resolved_range)
 
