@@ -564,7 +564,11 @@ def main():
                 import asyncio
                 import uvicorn
 
-                http_port = int(_cli_port)
+                try:
+                    http_port = int(_cli_port)
+                except ValueError:
+                    print(f"Error: invalid WORKSPACE_MCP_HTTP_PORT '{_cli_port}'.", file=sys.stderr)
+                    sys.exit(1)
 
                 async def _run_dual():
                     http_available = True
