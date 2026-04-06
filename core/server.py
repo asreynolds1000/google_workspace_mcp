@@ -483,6 +483,13 @@ def configure_server_for_http():
                     client_storage=client_storage,
                     jwt_signing_key=jwt_signing_key,
                 )
+                if provider.client_registration_options is not None:
+                    # Keep protocol-level auth limited to base identity scopes, but
+                    # allow dynamically registered MCP clients to request any scope
+                    # needed by enabled tools during subsequent authorization flows.
+                    provider.client_registration_options.default_scopes = (
+                        provider_valid_scopes
+                    )
                 # Enable protocol-level auth
                 server.auth = provider
                 logger.info(

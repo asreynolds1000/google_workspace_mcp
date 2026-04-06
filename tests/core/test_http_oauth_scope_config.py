@@ -9,6 +9,10 @@ def test_configure_server_for_http_uses_base_required_scopes(monkeypatch):
     class FakeGoogleProvider:
         def __init__(self, **kwargs):
             captured.update(kwargs)
+            self.client_registration_options = SimpleNamespace(
+                valid_scopes=kwargs.get("valid_scopes"),
+                default_scopes=None,
+            )
 
     monkeypatch.setattr(server_module, "get_transport_mode", lambda: "streamable-http")
     monkeypatch.setattr(server_module, "GoogleProvider", FakeGoogleProvider)
@@ -45,3 +49,6 @@ def test_configure_server_for_http_uses_base_required_scopes(monkeypatch):
 
     assert captured["required_scopes"] == sorted(server_module.BASE_SCOPES)
     assert captured["valid_scopes"] == sorted(server_module.get_current_scopes())
+    assert server_module.server.auth.client_registration_options.default_scopes == sorted(
+        server_module.get_current_scopes()
+    )
