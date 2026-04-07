@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 
 import re
@@ -7,6 +8,7 @@ from typing import Dict, List, Optional, Any, Callable, Union, Tuple
 from contextlib import ExitStack
 
 from google.auth.exceptions import RefreshError
+from google.oauth2 import service_account as google_service_account
 from googleapiclient.discovery import build
 from fastmcp.server.dependencies import get_access_token, get_context
 from auth.google_auth import get_authenticated_google_service, GoogleAuthenticationError
@@ -20,6 +22,7 @@ from auth.oauth_config import (
     is_oauth21_enabled,
     get_oauth_config,
     is_external_oauth21_provider,
+    is_service_account_enabled,
 )
 from core.context import set_fastmcp_session_id
 from auth.scopes import (
@@ -190,6 +193,38 @@ def _override_oauth21_user_email(
     return authenticated_user, args
 
 
+def _get_service_account_credentials(
+    scopes: List[str], subject: str
+) -> google_service_account.Credentials:
+    """
+    Build service account credentials for domain-wide delegation.
+
+    Args:
+        scopes: OAuth scopes to request
+        subject: Email of the domain user to impersonate
+
+    Returns:
+        google.oauth2.service_account.Credentials instance
+
+    Raises:
+        GoogleAuthenticationError: If credentials cannot be built
+    """
+    config = get_oauth_config()
+    try:
+        if config.service_account_key_file:
+            return google_service_account.Credentials.from_service_account_file(
+                config.service_account_key_file, scopes=scopes, subject=subject
+            )
+        info = json.loads(config.service_account_key_json)
+        return google_service_account.Credentials.from_service_account_info(
+            info, scopes=scopes, subject=subject
+        )
+    except Exception as e:
+        raise GoogleAuthenticationError(
+            f"Failed to build service account credentials: {e}"
+        ) from e
+
+
 async def _authenticate_service(
     use_oauth21: bool,
     service_name: str,
@@ -206,6 +241,16 @@ async def _authenticate_service(
     Returns:
         Tuple of (service, actual_user_email)
     """
+    if is_service_account_enabled():
+        credentials = _get_service_account_credentials(
+            resolved_scopes, user_google_email
+        )
+        service = build(service_name, service_version, credentials=credentials)
+        logger.info(
+            f"[{tool_name}] Service account: {service_name} impersonating {user_google_email}"
+        )
+        return service, user_google_email
+
     if use_oauth21:
         logger.debug(f"[{tool_name}] Using OAuth 2.1 flow")
         return await get_authenticated_google_service_oauth21(

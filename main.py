@@ -15,7 +15,7 @@ _original_stdout = sys.stdout
 if sys.platform == "darwin":
     sys.stdout = io.StringIO()
 
-from auth.oauth_config import reload_oauth_config, is_stateless_mode  # noqa: E402
+from auth.oauth_config import reload_oauth_config, is_stateless_mode, is_service_account_enabled  # noqa: E402
 from core.log_formatter import EnhancedLogFormatter, configure_file_logging  # noqa: E402
 from core.utils import check_credentials_directory_permissions  # noqa: E402
 from core.server import server, set_transport_mode, configure_server_for_http  # noqa: E402
@@ -287,6 +287,7 @@ def main():
             "OAUTHLIB_INSECURE_TRANSPORT", "false"
         ),
         "GOOGLE_CLIENT_SECRET_PATH": os.getenv("GOOGLE_CLIENT_SECRET_PATH", "Not Set"),
+        "GOOGLE_SERVICE_ACCOUNT_KEY_FILE": os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_FILE", "Not Set"),
     }
 
     for key, value in config_vars.items():
@@ -445,12 +446,36 @@ def main():
             safe_print("❌ Single-user mode is incompatible with stateless mode")
             safe_print("   Stateless mode requires OAuth 2.1 which is multi-user")
             sys.exit(1)
+
+        if is_service_account_enabled():
+            safe_print("❌ Single-user mode is incompatible with service account mode")
+            safe_print(
+                "   Service account mode handles auth via domain-wide delegation"
+            )
+            safe_print(
+                "   Please choose one mode: either --single-user OR GOOGLE_SERVICE_ACCOUNT_KEY_FILE"
+            )
+            sys.exit(1)
+
         os.environ["MCP_SINGLE_USER_MODE"] = "1"
         safe_print("🔐 Single-user mode enabled")
         safe_print("")
 
-    # Check credentials directory permissions before starting (skip in stateless mode)
-    if not is_stateless_mode():
+    # Service account mode startup validation
+    if is_service_account_enabled():
+        user_email = os.getenv("USER_GOOGLE_EMAIL")
+        if not user_email:
+            safe_print("❌ Service account mode requires USER_GOOGLE_EMAIL to be set")
+            safe_print(
+                "   Set USER_GOOGLE_EMAIL to the domain user to impersonate"
+            )
+            sys.exit(1)
+        safe_print("🔐 Service account mode enabled (domain-wide delegation)")
+        safe_print(f"   Impersonating: {user_email}")
+        safe_print("")
+
+    # Check credentials directory permissions before starting (skip in stateless/service-account mode)
+    if not is_stateless_mode() and not is_service_account_enabled():
         try:
             safe_print("🔍 Checking credentials directory permissions...")
             check_credentials_directory_permissions()
@@ -464,7 +489,8 @@ def main():
             logger.error(f"Failed credentials directory permission check: {e}")
             sys.exit(1)
     else:
-        safe_print("🔍 Skipping credentials directory check (stateless mode)")
+        skip_reason = "stateless mode" if is_stateless_mode() else "service account mode"
+        safe_print(f"🔍 Skipping credentials directory check ({skip_reason})")
         safe_print("")
 
     try:
@@ -481,21 +507,22 @@ def main():
         else:
             safe_print("")
             safe_print("🚀 Starting STDIO server")
-            # Start minimal OAuth callback server for stdio mode
-            from auth.oauth_callback_server import ensure_oauth_callback_available
+            # Start minimal OAuth callback server for stdio mode (not needed for service accounts)
+            if not is_service_account_enabled():
+                from auth.oauth_callback_server import ensure_oauth_callback_available
 
-            success, error_msg = ensure_oauth_callback_available(
-                "stdio", port, base_uri
-            )
-            if success:
-                safe_print(
-                    f"   OAuth callback server started on {display_url}/oauth2callback"
+                success, error_msg = ensure_oauth_callback_available(
+                    "stdio", port, base_uri
                 )
-            else:
-                warning_msg = "   ⚠️  Warning: Failed to start OAuth callback server"
-                if error_msg:
-                    warning_msg += f": {error_msg}"
-                safe_print(warning_msg)
+                if success:
+                    safe_print(
+                        f"   OAuth callback server started on {display_url}/oauth2callback"
+                    )
+                else:
+                    warning_msg = "   ⚠️  Warning: Failed to start OAuth callback server"
+                    if error_msg:
+                        warning_msg += f": {error_msg}"
+                    safe_print(warning_msg)
 
         safe_print("✅ Ready for MCP connections")
         safe_print("")
