@@ -275,9 +275,7 @@ async def test_search_messages_limits_parallel_space_fetches(mock_resolve, monke
 
     monkeypatch.setattr("gchat.chat_tools.asyncio.to_thread", fake_to_thread)
 
-    spaces = [
-        {"name": f"spaces/S{i}", "displayName": f"Space {i}"} for i in range(5)
-    ]
+    spaces = [{"name": f"spaces/S{i}", "displayName": f"Space {i}"} for i in range(5)]
 
     def list_messages(**kwargs):
         parent = kwargs["parent"]
@@ -300,7 +298,7 @@ async def test_search_messages_limits_parallel_space_fetches(mock_resolve, monke
         max_spaces=len(spaces),
     )
 
-    assert 'Found 5 messages matching \'text "message"\'' in result
+    assert "Found 5 messages matching 'text \"message\"'" in result
     assert state["max"] <= _SEARCH_MESSAGES_MAX_CONCURRENT_SPACE_FETCHES
 
 
@@ -353,7 +351,7 @@ async def test_search_messages_retries_ssl_per_space_without_restarting_search(
         max_spaces=2,
     )
 
-    assert 'Found 2 messages matching \'text "message"\'' in result
+    assert "Found 2 messages matching 'text \"message\"'" in result
     assert attempt_counts == {"spaces/S1": 3, "spaces/S2": 1}
     assert chat_service.spaces().list().execute.call_count == 1
 
