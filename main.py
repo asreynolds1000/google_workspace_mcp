@@ -699,17 +699,18 @@ def main():
                         http_task = asyncio.create_task(http_srv.serve())
                         safe_print(f"   workspace-cli endpoint: http://{host}:{http_port}/mcp")
 
-                    await server.run_stdio_async()
-
-                    if http_srv:
-                        http_srv.should_exit = True
-                    if http_task:
-                        try:
-                            await asyncio.wait_for(http_task, timeout=5.0)
-                        except (asyncio.TimeoutError, asyncio.CancelledError):
-                            http_task.cancel()
-                        except Exception:
-                            pass  # HTTP errors non-critical in stdio mode
+                    try:
+                        await server.run_stdio_async()
+                    finally:
+                        if http_srv:
+                            http_srv.should_exit = True
+                        if http_task:
+                            try:
+                                await asyncio.wait_for(http_task, timeout=5.0)
+                            except (asyncio.TimeoutError, asyncio.CancelledError):
+                                http_task.cancel()
+                            except Exception:
+                                pass  # HTTP errors non-critical in stdio mode
 
                 asyncio.run(_run_dual())
             else:
