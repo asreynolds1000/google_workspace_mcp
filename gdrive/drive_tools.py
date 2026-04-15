@@ -25,7 +25,14 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from auth.service_decorator import require_google_service
 from auth.oauth_config import is_stateless_mode
 from core.attachment_storage import get_attachment_storage, get_attachment_url
-from core.utils import extract_office_xml_text, handle_http_errors, validate_file_path
+from core.utils import (
+    IMAGE_MIME_TYPES,
+    encode_image_content,
+    extract_office_xml_text,
+    extract_pdf_text,
+    handle_http_errors,
+    validate_file_path,
+)
 from core.server import server
 from core.config import get_transport_mode
 from gdrive.drive_helpers import (
@@ -163,6 +170,9 @@ async def get_drive_file_content(
     • Native Google Docs, Sheets, Slides → exported as text / CSV.
     • Office files (.docx, .xlsx, .pptx) → unzipped & parsed with std-lib to
       extract readable text.
+    • PDFs → text extracted with pypdf when possible; scanned/image-only PDFs
+      fall back to a download hint.
+    • Images → returned as base64 with MIME metadata for multimodal clients.
     • Any other file → downloaded; tries UTF-8 decode, else notes binary.
 
     Args:
@@ -210,7 +220,10 @@ async def get_drive_file_content(
     }
 
     if mime_type in office_mime_types:
-        office_text = extract_office_xml_text(file_content_bytes, mime_type)
+        # Offload Office XML extraction to a thread to avoid blocking the event loop
+        office_text = await asyncio.to_thread(
+            extract_office_xml_text, file_content_bytes, mime_type
+        )
         if office_text:
             body_text = office_text
         else:
@@ -222,6 +235,19 @@ async def get_drive_file_content(
                     f"[Binary or unsupported text encoding for mimeType '{mime_type}' - "
                     f"{len(file_content_bytes)} bytes]"
                 )
+    elif mime_type == "application/pdf":
+        # Offload PDF text extraction to a thread to avoid blocking the event loop
+        pdf_text = await asyncio.to_thread(extract_pdf_text, file_content_bytes)
+        if pdf_text:
+            body_text = pdf_text
+        else:
+            body_text = (
+                f"[Could not extract text from PDF ({len(file_content_bytes)} bytes) "
+                f"- the file may be scanned/image-only. "
+                f"Use get_drive_file_download_url to get a direct download link instead.]"
+            )
+    elif mime_type in IMAGE_MIME_TYPES:
+        body_text = encode_image_content(file_content_bytes, mime_type)
     else:
         # For non-Office files (including Google native files), try UTF-8 decode directly
         try:

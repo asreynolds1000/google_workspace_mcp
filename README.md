@@ -92,7 +92,7 @@ Workspace MCP is the single most complete MCP server that integrates all major G
 <td valign="top" width="50%">
 
 **📧 Gmail** — Complete email management, end-to-end coverage<br>
-**📁 Drive** — File operations with sharing, permissions & Office formats<br>
+**📁 Drive** — File operations with sharing, permissions, Office files, PDFs & images<br>
 **📅 Calendar** — Full event management with advanced features<br>
 **📝 Docs** — Deep, fine-grained editing, formatting & comments<br>
 **📊 Sheets** — Flexible cell management, formatting & conditional rules<br>
@@ -719,7 +719,7 @@ cp .env.oauth21 .env
 | <sub>Tool</sub> | <sub>Tier</sub> | <sub>Description</sub> |
 |------|------|-------------|
 | <sub>`search_drive_files`</sub> | <sub>Core</sub> | <sub>Search files with query syntax</sub> |
-| <sub>`get_drive_file_content`</sub> | <sub>Core</sub> | <sub>Read file content (Office formats)</sub> |
+| <sub>`get_drive_file_content`</sub> | <sub>Core</sub> | <sub>Read file content (Office, PDF, image)</sub> |
 | <sub>`get_drive_file_download_url`</sub> | <sub>Core</sub> | <sub>Download Drive files to local disk</sub> |
 | <sub>`create_drive_file`</sub> | <sub>Core</sub> | <sub>Create files or fetch from URLs</sub> |
 | <sub>`create_drive_folder`</sub> | <sub>Core</sub> | <sub>Create empty folders in Drive or shared drives</sub> |
