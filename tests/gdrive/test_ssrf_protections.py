@@ -129,6 +129,29 @@ async def test_fetch_url_with_pinned_ip_uses_pinned_target_and_host_header(monke
     assert captured["extensions"]["sni_hostname"] == "example.com"
     assert captured["client_kwargs"]["trust_env"] is False
     assert captured["client_kwargs"]["follow_redirects"] is False
+    assert captured["client_kwargs"]["timeout"] is None
+
+
+@pytest.mark.asyncio
+async def test_ssrf_safe_fetch_threads_timeout_to_pinned_fetch(monkeypatch):
+    """Timeouts should flow through ssrf_safe_fetch to the pinned fetch helper."""
+    captured = {}
+    timeout = httpx.Timeout(5.0)
+
+    async def fake_fetch(url, *, timeout=None):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return httpx.Response(200, request=httpx.Request("GET", url), content=b"ok")
+
+    monkeypatch.setattr(http_utils, "fetch_url_with_pinned_ip", fake_fetch)
+
+    response = await http_utils.ssrf_safe_fetch(
+        "https://example.com/start", timeout=timeout
+    )
+
+    assert response.status_code == 200
+    assert captured["url"] == "https://example.com/start"
+    assert captured["timeout"] is timeout
 
 
 @pytest.mark.asyncio
@@ -136,7 +159,7 @@ async def test_ssrf_safe_fetch_follows_relative_redirects(monkeypatch):
     """Relative redirects should be resolved and re-checked."""
     calls = []
 
-    async def fake_fetch(url):
+    async def fake_fetch(url, *, timeout=None):
         calls.append(url)
         if len(calls) == 1:
             return httpx.Response(
@@ -158,7 +181,7 @@ async def test_ssrf_safe_fetch_follows_relative_redirects(monkeypatch):
 async def test_ssrf_safe_fetch_rejects_disallowed_redirect_scheme(monkeypatch):
     """Redirects to non-http(s) schemes should be blocked."""
 
-    async def fake_fetch(url):
+    async def fake_fetch(url, *, timeout=None):
         return httpx.Response(
             302,
             headers={"location": "file:///etc/passwd"},
@@ -186,7 +209,7 @@ async def test_fetch_url_with_pinned_ip_redacts_secret_query_in_errors():
 
 @pytest.mark.asyncio
 async def test_ssrf_safe_fetch_redacts_redirect_source_in_errors(monkeypatch):
-    async def fake_fetch(url):
+    async def fake_fetch(url, *, timeout=None):
         return httpx.Response(
             302,
             headers={},
@@ -195,7 +218,7 @@ async def test_ssrf_safe_fetch_redacts_redirect_source_in_errors(monkeypatch):
 
     monkeypatch.setattr(http_utils, "fetch_url_with_pinned_ip", fake_fetch)
 
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(http_utils.SSRFFetchError) as exc_info:
         await http_utils.ssrf_safe_fetch("https://example.com/start?token=secret")
 
     message = str(exc_info.value)

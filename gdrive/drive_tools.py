@@ -68,7 +68,13 @@ async def _stream_url_with_validation(
 
     async with _ssrf_safe_stream(url) as resp:
         if resp.status_code != 200:
-            request = getattr(resp, "request", None) or httpx.Request("GET", url)
+            request = getattr(resp, "request", None)
+            if request is None:
+                parsed_url = urlparse(url)
+                request = httpx.Request(
+                    "GET",
+                    f"{parsed_url.scheme}://{redacted_url}",
+                )
             raise httpx.HTTPStatusError(
                 f"Failed to fetch file from URL: {redacted_url} (status {resp.status_code})",
                 request=request,
@@ -106,6 +112,18 @@ async def _download_url_to_bytes(
     except Exception:
         spool.close()
         raise
+
+
+async def _get_file_size(file_obj: BinaryIO) -> int:
+    """Measure a possibly spooled file off the event loop and restore position."""
+
+    def _measure_size() -> int:
+        file_obj.seek(0, io.SEEK_END)
+        size = file_obj.tell()
+        file_obj.seek(0)
+        return size
+
+    return await asyncio.to_thread(_measure_size)
 
 
 @server.tool()
@@ -789,7 +807,7 @@ async def create_drive_file(
         elif parsed_url.scheme in ("http", "https"):
             # when running in stateless mode, deployment may not have access to local file system
             if is_stateless_mode():
-                with SpooledTemporaryFile(max_size=5 * 1024 * 1024) as spool:
+                with SpooledTemporaryFile(max_size=UPLOAD_CHUNK_SIZE_BYTES) as spool:
 
                     async def _write_spool(chunk: bytes) -> None:
                         await asyncio.to_thread(spool.write, chunk)
@@ -1076,9 +1094,7 @@ async def import_to_google_doc(
     # Upload with conversion
     if remote_file_data is not None:
         with remote_file_data:
-            remote_file_data.seek(0, io.SEEK_END)
-            remote_size = remote_file_data.tell()
-            remote_file_data.seek(0)
+            remote_size = await _get_file_size(remote_file_data)
 
             logger.info(
                 f"[import_to_google_doc] Downloaded from URL: {remote_size} bytes"

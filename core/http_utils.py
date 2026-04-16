@@ -19,6 +19,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+class SSRFFetchError(RuntimeError):
+    """Raised when SSRF-safe fetching fails after validation succeeds."""
+
+
 def redact_url(url: str) -> str:
     """Return a redacted URL safe for logs and exceptions."""
     parsed_url = urlparse(url)
@@ -137,7 +141,9 @@ def build_pinned_url(parsed_url, ip_address_str: str) -> str:
     )
 
 
-async def fetch_url_with_pinned_ip(url: str) -> httpx.Response:
+async def fetch_url_with_pinned_ip(
+    url: str, *, timeout: Optional[httpx.Timeout] = None
+) -> httpx.Response:
     """
     Fetch URL content by connecting to a validated, pre-resolved IP address.
 
@@ -160,7 +166,7 @@ async def fetch_url_with_pinned_ip(url: str) -> httpx.Response:
         pinned_url = build_pinned_url(parsed_url, resolved_ip)
         try:
             async with httpx.AsyncClient(
-                follow_redirects=False, trust_env=False
+                follow_redirects=False, trust_env=False, timeout=timeout
             ) as client:
                 request = client.build_request(
                     "GET",
@@ -176,13 +182,15 @@ async def fetch_url_with_pinned_ip(url: str) -> httpx.Response:
                 f"{parsed_url.hostname}: {exc.__class__.__name__}"
             )
 
-    raise Exception(
+    raise SSRFFetchError(
         "Failed to fetch URL after trying "
         f"{len(resolved_ips)} validated IP(s): {redacted_url}"
     ) from last_error
 
 
-async def ssrf_safe_fetch(url: str) -> httpx.Response:
+async def ssrf_safe_fetch(
+    url: str, *, timeout: Optional[httpx.Timeout] = None
+) -> httpx.Response:
     """
     Fetch a URL with SSRF protection that covers redirects and DNS rebinding.
 
@@ -197,19 +205,19 @@ async def ssrf_safe_fetch(url: str) -> httpx.Response:
 
     Raises:
         ValueError: If any URL in the redirect chain points to a private network.
-        Exception: If the HTTP request fails.
+        SSRFFetchError: If the HTTP request fails.
     """
     max_redirects = 10
     current_url = url
 
     for _ in range(max_redirects):
-        resp = await fetch_url_with_pinned_ip(current_url)
+        resp = await fetch_url_with_pinned_ip(current_url, timeout=timeout)
         redacted_current_url = redact_url(current_url)
 
         if resp.status_code in (301, 302, 303, 307, 308):
             location = resp.headers.get("location")
             if not location:
-                raise Exception(
+                raise SSRFFetchError(
                     f"Redirect with no Location header from {redacted_current_url}"
                 )
 
@@ -227,7 +235,7 @@ async def ssrf_safe_fetch(url: str) -> httpx.Response:
 
         return resp
 
-    raise Exception(
+    raise SSRFFetchError(
         f"Too many redirects (max {max_redirects}) fetching {redact_url(url)}"
     )
 
@@ -290,7 +298,7 @@ async def ssrf_safe_stream(
                 raise
 
         if resp is None:
-            raise Exception(
+            raise SSRFFetchError(
                 f"Failed to fetch URL after trying {len(resolved_ips)} validated IP(s): "
                 f"{redacted_url}"
             ) from last_error
@@ -300,7 +308,9 @@ async def ssrf_safe_stream(
             await resp.aclose()
             await client.aclose()
             if not location:
-                raise Exception(f"Redirect with no Location header from {redacted_url}")
+                raise SSRFFetchError(
+                    f"Redirect with no Location header from {redacted_url}"
+                )
             location = urljoin(current_url, location)
             redirect_parsed = urlparse(location)
             if redirect_parsed.scheme not in ("http", "https"):
@@ -318,6 +328,6 @@ async def ssrf_safe_stream(
             await client.aclose()
         return
 
-    raise Exception(
+    raise SSRFFetchError(
         f"Too many redirects (max {max_redirects}) fetching {redact_url(url)}"
     )
