@@ -139,6 +139,7 @@ else:
 set_transport_mode("streamable-http")
 
 # Import all tool modules to register their @server.tool() decorators
+import auth.account_tools  # noqa: F401 (read-only account enumeration, no Google API)
 import gmail.gmail_tools
 import gdrive.drive_tools
 import gcalendar.calendar_tools

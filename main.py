@@ -344,6 +344,10 @@ def main():
         safe_print(f"   - {key}: {value}")
     safe_print("")
 
+    # Always register non-service meta-tools (account enumeration, etc.).
+    # These don't depend on any Google API scope and aren't gated by --tools.
+    import_module("auth.account_tools")
+
     # Import tool modules to register them with the MCP server via decorators
     tool_imports = {
         "gmail": lambda: import_module("gmail.gmail_tools"),
