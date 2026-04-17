@@ -451,6 +451,8 @@ def main():
         safe_print(f"   - {key}: {value}")
     safe_print("")
 
+    import_module("auth.account_tools")
+
     # Import tool modules to register them with the MCP server via decorators.
     tool_imports = {
         svc: partial(import_module, mod) for svc, mod in SERVICE_MODULES.items()
