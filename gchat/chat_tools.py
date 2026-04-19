@@ -13,6 +13,8 @@ from typing import Dict, List, Optional
 import httpx
 from googleapiclient.errors import HttpError
 
+from mcp.types import ToolAnnotations
+
 # Auth & server utilities
 from auth.service_decorator import require_google_service, require_multiple_services
 from core.server import server
@@ -133,7 +135,15 @@ def _extract_rich_links(msg: dict) -> List[str]:
     return urls
 
 
-@server.tool()
+@server.tool(
+    title='List Spaces',
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("chat", "chat_spaces_readonly")
 @handle_http_errors("list_spaces", service_type="chat")
 async def list_spaces(
@@ -177,7 +187,15 @@ async def list_spaces(
     return "\n".join(output)
 
 
-@server.tool()
+@server.tool(
+    title='Get Messages',
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_multiple_services(
     [
         {"service_type": "chat", "scopes": "chat_read", "param_name": "chat_service"},
@@ -293,7 +311,15 @@ async def get_messages(
     return "\n".join(output)
 
 
-@server.tool()
+@server.tool(
+    title='Send Message',
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("chat", "chat_write")
 @handle_http_errors("send_message", service_type="chat")
 async def send_message(
@@ -342,7 +368,15 @@ async def send_message(
     return msg
 
 
-@server.tool()
+@server.tool(
+    title='Search Messages',
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_multiple_services(
     [
         {"service_type": "chat", "scopes": "chat_read", "param_name": "chat_service"},
@@ -521,7 +555,15 @@ async def search_messages(
     return "\n".join(output)
 
 
-@server.tool()
+@server.tool(
+    title='Create Reaction',
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("chat", "chat_write")
 @handle_http_errors("create_reaction", service_type="chat")
 async def create_reaction(
@@ -557,7 +599,15 @@ async def create_reaction(
     return f"Reacted with {emoji_unicode} on message {message_id}. Reaction ID: {reaction_name}"
 
 
-@server.tool()
+@server.tool(
+    title='Download Chat Attachment',
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("download_chat_attachment", is_read_only=True, service_type="chat")
 @require_google_service("chat", "chat_read")
 async def download_chat_attachment(
