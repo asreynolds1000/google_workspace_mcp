@@ -12,7 +12,15 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from gcalendar.calendar_tools import _create_event_impl, _modify_event_impl
+from gcalendar.calendar_tools import _create_event_impl, _modify_event_impl, manage_event
+
+
+def _unwrap(tool):
+    """Unwrap FunctionTool + decorators to the original async function."""
+    fn = tool.fn if hasattr(tool, "fn") else tool
+    while hasattr(fn, "__wrapped__"):
+        fn = fn.__wrapped__
+    return fn
 
 
 def _create_mock_service():
@@ -101,3 +109,21 @@ async def test_modify_event_can_update_recurrence():
 
     update_body = mock_service.events().update.call_args[1]["body"]
     assert update_body["recurrence"] == ["RRULE:FREQ=WEEKLY;COUNT=6"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["create", "update", "delete", "rsvp"])
+async def test_manage_event_rejects_invalid_send_updates(action):
+    fn = _unwrap(manage_event)
+    with pytest.raises(ValueError, match="Invalid send_updates 'invalid'"):
+        await fn(
+            service=Mock(),
+            user_google_email="user@example.com",
+            action=action,
+            summary="x",
+            start_time="2026-04-06T09:00:00Z",
+            end_time="2026-04-06T09:15:00Z",
+            event_id="evt123",
+            response="accepted",
+            send_updates="invalid",
+        )
