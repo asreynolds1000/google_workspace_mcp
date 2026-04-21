@@ -637,7 +637,9 @@ def handle_auth_callback(
             logger.warning(
                 "OAuth callback missing state parameter; using most recent stored state (stdio fallback)"
             )
-            state_info = store.consume_latest_oauth_state()
+            state_info = store.consume_latest_oauth_state(
+                initiating_session_id=session_id
+            )
             if not state_info:
                 raise ValueError(
                     "Missing OAuth state parameter and no stored state available"
