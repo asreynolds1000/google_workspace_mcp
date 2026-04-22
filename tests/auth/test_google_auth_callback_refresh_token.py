@@ -143,9 +143,7 @@ def test_callback_raises_when_google_rejects_pkce_verifier(monkeypatch):
 
     class _FailingFlow:
         def fetch_token(self, authorization_response):  # noqa: ARG002
-            raise Exception(
-                "(invalid_grant) code_verifier or verifier is not needed."
-            )
+            raise Exception("(invalid_grant) code_verifier or verifier is not needed.")
 
     def _fake_create_oauth_flow(**kwargs):  # noqa: ARG001
         return _FailingFlow()
