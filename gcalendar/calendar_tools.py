@@ -669,6 +669,7 @@ async def _create_event_impl(
     guests_can_modify: Optional[bool] = None,
     guests_can_invite_others: Optional[bool] = None,
     guests_can_see_other_guests: Optional[bool] = None,
+    send_updates: str = "all",
 ) -> str:
     """Internal implementation for creating a calendar event."""
     logger.info(
@@ -845,6 +846,7 @@ async def _create_event_impl(
                     body=event_body,
                     supportsAttachments=True,
                     conferenceDataVersion=1 if add_google_meet else 0,
+                    sendUpdates=send_updates,
                 )
                 .execute()
             )
@@ -857,6 +859,7 @@ async def _create_event_impl(
                     calendarId=calendar_id,
                     body=event_body,
                     conferenceDataVersion=1 if add_google_meet else 0,
+                    sendUpdates=send_updates,
                 )
                 .execute()
             )
@@ -932,6 +935,7 @@ async def _modify_event_impl(
     guests_can_modify: Optional[bool] = None,
     guests_can_invite_others: Optional[bool] = None,
     guests_can_see_other_guests: Optional[bool] = None,
+    send_updates: str = "all",
 ) -> str:
     """Internal implementation for modifying a calendar event."""
     logger.info(
@@ -1132,6 +1136,7 @@ async def _modify_event_impl(
                 eventId=event_id,
                 body=event_body,
                 conferenceDataVersion=1,
+                sendUpdates=send_updates,
             )
             .execute()
         )
@@ -1164,6 +1169,7 @@ async def _delete_event_impl(
     user_google_email: str,
     event_id: str,
     calendar_id: str = "primary",
+    send_updates: str = "all",
 ) -> str:
     """Internal implementation for deleting a calendar event."""
     logger.info(
@@ -1198,7 +1204,13 @@ async def _delete_event_impl(
     # Proceed with the deletion
     await asyncio.to_thread(
         lambda: (
-            service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+            service.events()
+            .delete(
+                calendarId=calendar_id,
+                eventId=event_id,
+                sendUpdates=send_updates,
+            )
+            .execute()
         )
     )
 
@@ -1221,12 +1233,6 @@ async def _rsvp_event_impl(
     if response not in valid_responses:
         raise ValueError(
             f"Invalid response '{response}'. Must be one of: {sorted(valid_responses)}"
-        )
-
-    valid_send_updates = {"all", "externalOnly", "none"}
-    if send_updates not in valid_send_updates:
-        raise ValueError(
-            f"Invalid send_updates '{send_updates}'. Must be one of: {sorted(valid_send_updates)}"
         )
 
     existing_event = await asyncio.to_thread(
@@ -1337,12 +1343,20 @@ async def manage_event(
         guests_can_see_other_guests (Optional[bool]): Whether attendees can see other guests.
         response (Optional[str]): RSVP response — "accepted", "declined", "tentative", or "needsAction" (rsvp action only).
         rsvp_comment (Optional[str]): Optional message to include with the RSVP response (rsvp action only).
-        send_updates (Optional[str]): Notification behavior for RSVP — "all" (default), "externalOnly", or "none" (rsvp action only).
+        send_updates (Optional[str]): Notification behavior for create, update, delete, and rsvp — "all" (default), "externalOnly", or "none".
 
     Returns:
         str: Confirmation message with event details.
     """
     action_lower = action.lower().strip()
+
+    if send_updates is not None:
+        valid_send_updates = {"all", "externalOnly", "none"}
+        if send_updates not in valid_send_updates:
+            raise ValueError(
+                f"Invalid send_updates '{send_updates}'. Must be one of: {sorted(valid_send_updates)}"
+            )
+
     if action_lower == "create":
         if not summary or not start_time or not end_time:
             raise ValueError(
@@ -1371,6 +1385,7 @@ async def manage_event(
             guests_can_invite_others=guests_can_invite_others,
             guests_can_see_other_guests=guests_can_see_other_guests,
             recurrence=recurrence,
+            send_updates=send_updates or "all",
         )
     elif action_lower == "update":
         if not event_id:
@@ -1397,6 +1412,7 @@ async def manage_event(
             guests_can_modify=guests_can_modify,
             guests_can_invite_others=guests_can_invite_others,
             guests_can_see_other_guests=guests_can_see_other_guests,
+            send_updates=send_updates or "all",
         )
     elif action_lower == "delete":
         if not event_id:
@@ -1406,6 +1422,7 @@ async def manage_event(
             user_google_email=user_google_email,
             event_id=event_id,
             calendar_id=calendar_id,
+            send_updates=send_updates or "all",
         )
     elif action_lower == "rsvp":
         if not event_id:
@@ -1903,6 +1920,7 @@ async def _create_focus_time_event_impl(
     end_time: str,
     calendar_id: str = "primary",
     summary: Optional[str] = None,
+    description: Optional[str] = None,
     auto_decline_mode: Optional[str] = None,
     decline_message: Optional[str] = None,
     chat_status: Optional[str] = None,
@@ -1937,6 +1955,8 @@ async def _create_focus_time_event_impl(
         "focusTimeProperties": focus_time_props,
         "transparency": "opaque",
     }
+    if description:
+        event_body["description"] = description
     if recurrence:
         event_body["recurrence"] = recurrence
 
@@ -2067,6 +2087,7 @@ async def _update_focus_time_event_impl(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     summary: Optional[str] = None,
+    description: Optional[str] = None,
     auto_decline_mode: Optional[str] = None,
     decline_message: Optional[str] = None,
     chat_status: Optional[str] = None,
@@ -2092,6 +2113,8 @@ async def _update_focus_time_event_impl(
 
     if summary is not None:
         patch_body["summary"] = summary
+    if description is not None:
+        patch_body["description"] = description
     if start_time is not None:
         patch_body["start"] = _focus_time_time_entry(
             start_time, is_end=False, timezone=timezone
@@ -2214,6 +2237,7 @@ async def manage_focus_time(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     summary: Optional[str] = None,
+    description: Optional[str] = None,
     auto_decline_mode: Optional[str] = None,
     decline_message: Optional[str] = None,
     chat_status: Optional[str] = None,
@@ -2236,6 +2260,7 @@ async def manage_focus_time(
         start_time (Optional[str]): Start date/time. Use 'YYYY-MM-DD' for full-day or RFC3339 for partial-day (e.g., '2024-04-05T09:00:00Z'). Date-only values are auto-converted to dateTime (midnight-to-midnight). Required for create.
         end_time (Optional[str]): End date/time (exclusive). Same format as start_time. For a single full day on April 5, use start_time='2026-04-05' and end_time='2026-04-06'. Required for create.
         summary (Optional[str]): Display text on the calendar. Defaults to "Focus Time".
+        description (Optional[str]): Event description. Useful for adding context about what the focus time is for.
         auto_decline_mode (Optional[str]): How to handle conflicting invitations. One of: "declineAllConflictingInvitations" (default), "declineOnlyNewConflictingInvitations", "declineNone".
         decline_message (Optional[str]): Message included when auto-declining invitations.
         chat_status (Optional[str]): Google Chat status during the focus time. Supports "doNotDisturb" (default) and "available".
@@ -2261,6 +2286,7 @@ async def manage_focus_time(
             end_time=end_time,
             calendar_id=calendar_id,
             summary=summary,
+            description=description,
             auto_decline_mode=auto_decline_mode,
             decline_message=decline_message,
             chat_status=chat_status,
@@ -2288,6 +2314,7 @@ async def manage_focus_time(
             start_time=start_time,
             end_time=end_time,
             summary=summary,
+            description=description,
             auto_decline_mode=auto_decline_mode,
             decline_message=decline_message,
             chat_status=chat_status,

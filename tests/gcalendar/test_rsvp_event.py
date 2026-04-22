@@ -104,19 +104,6 @@ async def test_rsvp_invalid_response():
         )
 
 
-@pytest.mark.asyncio
-async def test_rsvp_invalid_send_updates():
-    service = Mock()
-    with pytest.raises(ValueError, match="Invalid send_updates 'invalid'"):
-        await _rsvp_event_impl(
-            service=service,
-            user_google_email="user@example.com",
-            event_id="evt123",
-            response="accepted",
-            send_updates="invalid",
-        )
-
-
 # -- Guard tests --
 
 
