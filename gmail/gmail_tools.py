@@ -1550,11 +1550,23 @@ async def get_gmail_messages_content_batch(
                         )
                         body_label = "BODY"
 
+                    attachments = _extract_attachments(payload)
+
                     msg_output = "\n".join(
                         _format_message_header_lines(headers, message_id=mid)
                     )
                     msg_output += f"\nWeb Link: {_generate_gmail_web_url(mid)}\n"
                     msg_output += f"\n--- {body_label} ---\n{body_data}\n"
+
+                    if attachments:
+                        msg_output += "\n--- ATTACHMENTS ---\n"
+                        for i, att in enumerate(attachments, 1):
+                            size_kb = att["size"] / 1024
+                            msg_output += (
+                                f"{i}. {att['filename']} ({att['mimeType']}, {size_kb:.1f} KB)\n"
+                                f"   Attachment ID: {att['attachmentId']}\n"
+                                f"   Use get_gmail_attachment_content(message_id='{mid}', attachment_id='{att['attachmentId']}') to download\n"
+                            )
 
                     output_messages.append(msg_output)
 
@@ -2255,9 +2267,10 @@ def _format_thread_content(
 
     # Process each message in the thread
     for i, message in enumerate(messages, 1):
+        payload = message.get("payload", {})
         # Extract headers
         headers = {
-            h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])
+            h["name"]: h["value"] for h in payload.get("headers", [])
         }
 
         sender = headers.get("From", "(unknown sender)")
@@ -2274,7 +2287,6 @@ def _format_thread_content(
             body_label = "RAW MIME"
         else:
             # Extract both text and HTML bodies
-            payload = message.get("payload", {})
             bodies = _extract_message_bodies(payload)
             text_body = bodies.get("text", "")
             html_body = bodies.get("html", "")
@@ -2284,6 +2296,10 @@ def _format_thread_content(
                 text_body, html_body, body_format=body_format
             )
             body_label = "BODY"
+
+        # Extract attachment metadata for this message
+        attachments = _extract_attachments(payload)
+        message_id = message.get("id", "")
 
         # Add message to content
         content_lines.extend(
@@ -2316,6 +2332,17 @@ def _format_thread_content(
             )
         else:
             content_lines.extend(["", body_data, ""])
+
+        if attachments:
+            content_lines.append("--- ATTACHMENTS ---")
+            for j, att in enumerate(attachments, 1):
+                size_kb = att["size"] / 1024
+                content_lines.append(
+                    f"{j}. {att['filename']} ({att['mimeType']}, {size_kb:.1f} KB)\n"
+                    f"   Attachment ID: {att['attachmentId']}\n"
+                    f"   Use get_gmail_attachment_content(message_id='{message_id}', attachment_id='{att['attachmentId']}') to download"
+                )
+            content_lines.append("")
 
     return "\n".join(content_lines)
 
