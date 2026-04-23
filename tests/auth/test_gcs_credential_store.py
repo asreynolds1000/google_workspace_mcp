@@ -16,6 +16,7 @@ from auth import credential_store as cs_module
 from auth.credential_store import (
     GCSCredentialStore,
     LocalDirectoryCredentialStore,
+    _parse_bool_env,
     get_credential_store,
 )
 
@@ -163,6 +164,18 @@ class TestAtomicWrite:
         assert cred_store.store_credential("user@example.com", mock_creds) is False
         assert blob.upload_from_string.call_count == 3
 
+    def test_reload_non_notfound_error_returns_false(
+        self, cred_store, mock_storage_client, mock_creds
+    ):
+        """Permission / network / quota errors from reload() must not propagate."""
+        blob = MagicMock()
+        blob.reload.side_effect = Exception("permission denied")
+        mock_storage_client.blob.return_value = blob
+
+        # Should return False (error path), not raise
+        assert cred_store.store_credential("user@example.com", mock_creds) is False
+        blob.upload_from_string.assert_not_called()
+
 
 class TestCMEKVerification:
     """WORKSPACE_MCP_GCS_REQUIRE_CMEK gates on bucket.default_kms_key_name."""
@@ -272,3 +285,24 @@ class TestBackendSelection:
         monkeypatch.setenv("WORKSPACE_MCP_CREDENTIAL_STORE_BACKEND", "gibberish")
         monkeypatch.setenv("WORKSPACE_MCP_CREDENTIALS_DIR", str(tmp_path))
         assert isinstance(get_credential_store(), LocalDirectoryCredentialStore)
+
+
+class TestParseBoolEnv:
+    """The strict bool parser used for security-relevant flags.
+
+    Fails loud on unrecognised input to prevent typos silently disabling
+    a flag like WORKSPACE_MCP_GCS_REQUIRE_CMEK.
+    """
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " true ", "Yes"])
+    def test_truthy_values(self, value):
+        assert _parse_bool_env(value) is True
+
+    @pytest.mark.parametrize("value", ["0", "false", "FALSE", "no", "off", "", " ", None])
+    def test_falsy_values(self, value):
+        assert _parse_bool_env(value) is False
+
+    @pytest.mark.parametrize("value", ["treu", "ye", "maybe", "2", "enabled"])
+    def test_unrecognised_values_raise(self, value):
+        with pytest.raises(ValueError, match="Invalid boolean env var"):
+            _parse_bool_env(value)

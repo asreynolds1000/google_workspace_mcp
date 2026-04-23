@@ -397,12 +397,12 @@ class GCSCredentialStore(CredentialStore):
         for attempt in range(3):
             blob = self._bucket.blob(self._blob_name(user_email))
             try:
-                blob.reload()
-                generation = blob.generation
-            except NotFound:
-                generation = 0  # must-not-exist precondition
+                try:
+                    blob.reload()
+                    generation = blob.generation
+                except NotFound:
+                    generation = 0  # must-not-exist precondition
 
-            try:
                 blob.upload_from_string(
                     payload,
                     content_type="application/json",
@@ -454,9 +454,32 @@ class GCSCredentialStore(CredentialStore):
         )
 
 
-def _parse_bool_env(value: str) -> bool:
-    """Parse a truthy env var value; defaults to False."""
-    return value.strip().lower() in ("1", "true", "yes", "on")
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_VALUES = frozenset({"", "0", "false", "no", "off"})
+
+
+def _parse_bool_env(value: Optional[str]) -> bool:
+    """Parse a boolean env var value, failing loudly on anything unrecognised.
+
+    Accepts (case-insensitive, whitespace-trimmed):
+        true:  ``1``, ``true``, ``yes``, ``on``
+        false: ``0``, ``false``, ``no``, ``off``, empty string, None
+
+    Raises ValueError for any other input. The strict parsing matters for
+    security-relevant flags (e.g. ``WORKSPACE_MCP_GCS_REQUIRE_CMEK``) where
+    a typo like ``"treu"`` would otherwise silently disable the flag.
+    """
+    if value is None:
+        return False
+    normalised = value.strip().lower()
+    if normalised in _TRUE_VALUES:
+        return True
+    if normalised in _FALSE_VALUES:
+        return False
+    raise ValueError(
+        f"Invalid boolean env var value: {value!r}. "
+        f"Expected one of: {sorted(_TRUE_VALUES | _FALSE_VALUES - {''})}"
+    )
 
 
 # Global credential store instance

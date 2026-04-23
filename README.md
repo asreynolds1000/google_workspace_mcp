@@ -1471,11 +1471,11 @@ export WORKSPACE_MCP_GCS_REQUIRE_CMEK="true"                # optional; see belo
 
 By default GCS encrypts objects with Google-managed keys. For customer-managed encryption, set a default KMS key on the bucket (e.g. via Terraform's `google_storage_bucket.encryption.default_kms_key_name`). All credentials written to the bucket will inherit the key transparently — no application-level key to manage.
 
-To guard against accidentally deploying against a bucket without CMEK, set `WORKSPACE_MCP_GCS_REQUIRE_CMEK=true`. The store will verify the bucket has a default KMS key at startup and refuse to initialise otherwise.
+To guard against accidentally deploying against a bucket without CMEK, set `WORKSPACE_MCP_GCS_REQUIRE_CMEK=true`. The store will verify the bucket has a default KMS key at startup and refuse to initialise otherwise. Note that this check reads bucket metadata, so the runtime service account additionally needs `storage.buckets.get` (provided by `roles/storage.legacyBucketReader` or `roles/storage.admin`) — `roles/storage.objectUser` alone only covers object operations.
 
 **Usage Example:**
 ```python
-from auth.credential_store import get_credential_store
+from auth.credential_store import get_credential_store, LocalDirectoryCredentialStore
 
 # Get the global credential store instance
 store = get_credential_store()
@@ -1486,8 +1486,11 @@ store.store_credential("user@example.com", credentials)
 # Retrieve credentials
 creds = store.get_credential("user@example.com")
 
-# List all users with stored credentials
-users = store.list_users()
+# List all users with stored credentials (local_directory backend only;
+# GCSCredentialStore intentionally does not support enumeration — use the
+# upstream identity provider to enumerate users instead).
+if isinstance(store, LocalDirectoryCredentialStore):
+    users = store.list_users()
 ```
 
 The credential store automatically handles credential serialization, expiry parsing, and provides error handling for storage operations.
