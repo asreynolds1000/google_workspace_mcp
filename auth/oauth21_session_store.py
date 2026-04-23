@@ -587,6 +587,13 @@ class OAuth21SessionStore:
             mcp_session_id: FastMCP session ID to map to this user
             issuer: Token issuer (e.g., "https://accounts.google.com")
         """
+        # Single-user mode reads credentials directly by email and bypasses the
+        # session mapping. Keeping the immutable MCP session binding enabled here
+        # turns a successful token refresh for a second account into a false
+        # "rebind" error.
+        if os.getenv("MCP_SINGLE_USER_MODE") == "1":
+            mcp_session_id = None
+
         with self._lock:
             normalized_expiry = _normalize_expiry_to_naive_utc(expiry)
 
