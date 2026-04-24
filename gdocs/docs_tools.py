@@ -2452,6 +2452,104 @@ async def update_doc_tab(
     )
 
 
+def _find_tab_end_index(doc: dict, target_tab_id: str) -> int:
+    """Walk the document tabs tree and return the end index of target tab's body."""
+
+    def walk(tabs: list) -> int:
+        for tab in tabs:
+            tab_props = tab.get("tabProperties", {})
+            if tab_props.get("tabId") == target_tab_id:
+                body = tab.get("documentTab", {}).get("body", {})
+                content = body.get("content", [])
+                if content:
+                    return content[-1].get("endIndex", 1)
+                return 1
+            child_tabs = tab.get("childTabs", [])
+            if child_tabs:
+                found = walk(child_tabs)
+                if found:
+                    return found
+        return 0
+
+    return walk(doc.get("tabs", []))
+
+
+@server.tool()
+@handle_http_errors("update_tab_from_markdown", service_type="docs")
+@require_google_service("docs", "docs_write")
+async def update_tab_from_markdown(
+    service: Any,
+    user_google_email: str,
+    document_id: str,
+    tab_id: str,
+    markdown_text: str,
+    replace_existing: bool = True,
+) -> dict:
+    """
+    Replace or append markdown content into a specific document tab.
+
+    Parses the markdown, generates Docs API batchUpdate requests targeting the
+    given tab, and applies them. When replace_existing is True, the tab's
+    current body content is cleared before insertion.
+
+    Args:
+        user_google_email: Google account to act as
+        document_id: Target Google Doc ID
+        tab_id: Target tab ID (obtain from insert_doc_tab or list_doc_tabs)
+        markdown_text: Markdown source to render into the tab
+        replace_existing: If True, delete existing tab body before inserting
+
+    Returns:
+        dict with keys - success (bool), requests_applied (int), tab_id (str)
+    """
+    from gdocs.docs_markdown_writer import markdown_to_docs_requests
+
+    logger.info(
+        f"[update_tab_from_markdown] Doc={document_id}, tab_id='{tab_id}', "
+        f"replace_existing={replace_existing}, md_len={len(markdown_text)}"
+    )
+
+    all_requests: List[dict] = []
+
+    if replace_existing:
+        # Read current tab content length, delete existing body if any
+        doc = await asyncio.to_thread(
+            service.documents()
+            .get(documentId=document_id, includeTabsContent=True)
+            .execute
+        )
+        tab_end = _find_tab_end_index(doc, tab_id)
+        if tab_end and tab_end > 1:
+            all_requests.append(
+                {
+                    "deleteContentRange": {
+                        "range": {
+                            "startIndex": 1,
+                            "endIndex": tab_end,
+                            "tabId": tab_id,
+                        }
+                    }
+                }
+            )
+
+    all_requests.extend(markdown_to_docs_requests(markdown_text, tab_id=tab_id))
+
+    if not all_requests:
+        return {"success": True, "requests_applied": 0, "tab_id": tab_id}
+
+    await asyncio.to_thread(
+        service.documents()
+        .batchUpdate(documentId=document_id, body={"requests": all_requests})
+        .execute
+    )
+
+    return {
+        "success": True,
+        "requests_applied": len(all_requests),
+        "tab_id": tab_id,
+    }
+
+
 # Create comment management tools for documents
 _comment_tools = create_comment_tools("document", "document_id")
 
