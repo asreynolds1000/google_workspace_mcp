@@ -1,3 +1,5 @@
+import pytest
+
 from auth.oauth21_session_store import OAuth21SessionStore
 
 
@@ -86,3 +88,42 @@ def test_deserialize_oauth_state_entry_normalizes_invalid_and_naive_timestamps(
     assert deserialized["created_at"] is not None
     assert deserialized["created_at"].tzinfo is not None
     assert deserialized["expires_at"] is None
+
+
+def test_store_session_rejects_mcp_session_rebind_by_default(tmp_path):
+    state_file = tmp_path / "oauth_states.json"
+    store = OAuth21SessionStore(oauth_state_file=str(state_file))
+
+    store.store_session(
+        user_email="account-a@example.com",
+        access_token="token-a",
+        mcp_session_id="session-123",
+    )
+
+    with pytest.raises(ValueError, match="already bound to a different user"):
+        store.store_session(
+            user_email="account-b@example.com",
+            access_token="token-b",
+            mcp_session_id="session-123",
+        )
+
+
+def test_store_session_skips_mcp_binding_in_single_user_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_SINGLE_USER_MODE", "1")
+
+    state_file = tmp_path / "oauth_states.json"
+    store = OAuth21SessionStore(oauth_state_file=str(state_file))
+
+    store.store_session(
+        user_email="account-a@example.com",
+        access_token="token-a",
+        mcp_session_id="session-123",
+    )
+    store.store_session(
+        user_email="account-b@example.com",
+        access_token="token-b",
+        mcp_session_id="session-123",
+    )
+
+    assert store.get_user_by_mcp_session("session-123") is None
+    assert store.get_credentials("account-b@example.com").token == "token-b"
