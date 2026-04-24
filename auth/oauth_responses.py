@@ -5,6 +5,7 @@ Provides reusable HTML response templates for OAuth authentication flows
 to eliminate duplication between server.py and oauth_callback_server.py.
 """
 
+from html import escape as html_escape
 from fastapi.responses import HTMLResponse
 from typing import Optional
 
@@ -25,7 +26,7 @@ def create_error_response(error_message: str, status_code: int = 400) -> HTMLRes
         <head><title>Authentication Error</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center;">
             <h2 style="color: #d32f2f;">Authentication Error</h2>
-            <p>{error_message}</p>
+            <p>{html_escape(error_message)}</p>
             <p>Please ensure you grant the requested permissions. You can close this tab and try again.</p>
         </body>
         </html>
@@ -193,7 +194,7 @@ def create_success_response(verified_user_id: Optional[str] = None) -> HTMLRespo
         <div class="icon">✓</div>
         <h1>Authentication Successful</h1>
         <div class="message">
-            You've been authenticated as <span class="user-id">{user_display}</span>
+            You've been authenticated as <span class="user-id">{html_escape(user_display)}</span>
         </div>
         <div class="message">
             Your credentials have been securely saved. You can now close this tab and retry your original command.
@@ -221,7 +222,7 @@ def create_server_error_response(error_detail: str) -> HTMLResponse:
         <head><title>Authentication Processing Error</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center;">
             <h2 style="color: #d32f2f;">Authentication Processing Error</h2>
-            <p>An unexpected error occurred while processing your authentication: {error_detail}</p>
+            <p>An unexpected error occurred while processing your authentication: {html_escape(error_detail)}</p>
             <p>Please try again. You can close this tab.</p>
         </body>
         </html>
