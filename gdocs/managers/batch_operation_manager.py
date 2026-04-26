@@ -880,12 +880,17 @@ class BatchOperationManager:
         """
         created_tabs = []
         for reply in result.get("replies", []):
-            if "createDocumentTab" in reply:
-                props = reply["createDocumentTab"].get("tabProperties", {})
-                tab_id = props.get("tabId")
-                title = props.get("title", "")
-                if tab_id:
-                    created_tabs.append({"tab_id": tab_id, "title": title})
+            # Google's Docs API returns the result under "addDocumentTab"
+            # matching the request field name. Accept "createDocumentTab" too
+            # in case the API surfaces that key in some legacy or future branch.
+            for key in ("addDocumentTab", "createDocumentTab"):
+                if key in reply:
+                    props = reply[key].get("tabProperties", {})
+                    tab_id = props.get("tabId")
+                    title = props.get("title", "")
+                    if tab_id:
+                        created_tabs.append({"tab_id": tab_id, "title": title})
+                    break
         return created_tabs
 
     def _build_operation_summary(self, operation_descriptions: list[str]) -> str:

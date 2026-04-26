@@ -9,7 +9,7 @@ MCP tools for reading, creating, editing, and managing Google Docs. All tools re
 - Paragraph & List Styling: update_paragraph_style
 - Structural Elements: insert_doc_elements, create_table_with_data, insert_doc_image
 - Headers, Footers & Export: update_doc_headers_footers, export_doc_to_pdf
-- Tabs: insert_doc_tab, update_doc_tab, delete_doc_tab
+- Tabs: manage_doc_tab
 - Comments: list_document_comments, manage_document_comment
 - Inspection & Debugging: inspect_doc_structure, debug_table_structure
 - Batch Operations: batch_update_doc
@@ -201,35 +201,41 @@ Export a Google Doc to PDF and save it to Drive.
 
 ## Tabs
 
-### insert_doc_tab
-Add a new tab to a document.
+### manage_doc_tab
+Create, rename, delete, or populate tabs from Markdown. Uses `action` to select the operation.
 
 | Parameter | Type | Required | Default | Notes |
 |-----------|------|----------|---------|-------|
 | user_google_email | string | yes | | |
 | document_id | string | yes | | |
-| title | string | yes | | Tab title |
-| index | integer | yes | | 0-based position among sibling tabs |
-| parent_tab_id | string | no | | Nest under this parent tab |
+| action | string | yes | | `"create"`, `"rename"`, `"delete"`, or `"populate_from_markdown"` |
+| tab_id | string | rename/delete/populate | | Get from `inspect_doc_structure` |
+| title | string | create/rename | | Tab title |
+| index | integer | create | | 0-based position among sibling tabs |
+| parent_tab_id | string | no | | Nest under a parent tab (create only) |
+| markdown_text | string | populate | | Markdown source to render |
+| replace_existing | boolean | no | `true` | Clear tab body before inserting markdown |
 
-### update_doc_tab
-Rename an existing tab.
+**Supported markdown** (populate_from_markdown action)
 
-| Parameter | Type | Required | Default | Notes |
-|-----------|------|----------|---------|-------|
-| user_google_email | string | yes | | |
-| document_id | string | yes | | |
-| tab_id | string | yes | | Get from `inspect_doc_structure` |
-| title | string | yes | | New tab title |
+Headings (H1-H6), paragraphs, bold/italic/code inline, links, ordered
+and unordered lists, fenced code blocks, blockquotes, horizontal rules,
+and images rendered as linked alt text fallback.
 
-### delete_doc_tab
-Delete a tab by ID.
+Not yet supported: embedded image insertion (images rendered as linked alt text fallback only), tables (plain-text fallback), footnotes, smart chips, equations.
 
-| Parameter | Type | Required | Default | Notes |
-|-----------|------|----------|---------|-------|
-| user_google_email | string | yes | | |
-| document_id | string | yes | | |
-| tab_id | string | yes | | Get from `inspect_doc_structure` |
+**Example**
+
+~~~python
+# Create a tab, then populate it from markdown
+manage_doc_tab(document_id="...", action="create", title="Blog Article", index=0)
+manage_doc_tab(
+    document_id="...",
+    action="populate_from_markdown",
+    tab_id="t.0.5",
+    markdown_text=open("blog.md").read(),
+)
+~~~
 
 ---
 

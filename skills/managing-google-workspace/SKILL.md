@@ -133,7 +133,7 @@ For parameters: [references/calendar.md](references/calendar.md)
 | Inspect structure | `inspect_doc_structure` |
 | Batch update (multiple ops) | `batch_update_doc` |
 | Headers/footers | `update_doc_headers_footers` |
-| Manage tabs | `insert_doc_tab` / `update_doc_tab` / `delete_doc_tab` |
+| Manage tabs | `manage_doc_tab` |
 | Export to PDF | `export_doc_to_pdf` |
 | List docs in folder | `list_docs_in_folder` |
 | Search docs | `search_docs` |

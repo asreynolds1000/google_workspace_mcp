@@ -73,6 +73,7 @@ docs:
     - inspect_doc_structure
     - create_table_with_data
     - debug_table_structure
+    - manage_doc_tab
 
 sheets:
   core:

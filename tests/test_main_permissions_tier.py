@@ -6,6 +6,11 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Keep these tests independent of a developer's local .env. Importing main loads
+# .env, and OAuth 2.1 mode changes tool schemas at decoration time.
+os.environ["MCP_ENABLE_OAUTH21"] = "false"
+os.environ["WORKSPACE_MCP_STATELESS_MODE"] = "false"
+
 import main
 
 

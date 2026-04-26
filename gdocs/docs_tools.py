@@ -9,7 +9,9 @@ import asyncio
 import io
 import inspect
 import re
-from typing import List, Any, Optional
+from typing import List, Any, Literal, Optional, Union
+
+from typing_extensions import TypedDict
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
@@ -50,6 +52,7 @@ from gdocs.docs_markdown import (
     format_comments_appendix,
     parse_drive_comments,
 )
+from gdocs.docs_markdown_writer import markdown_to_docs_requests
 from gdocs.operation_schemas import BatchDocOperations
 
 # Import operation managers for complex business logic
@@ -2331,125 +2334,275 @@ async def get_doc_as_markdown(
         return markdown.rstrip("\n") + "\n\n" + appendix
 
 
+def _find_tab_end_index(doc: dict, target_tab_id: str) -> Optional[int]:
+    """Walk the document tabs tree and return the end index of target tab's body.
+
+    Returns:
+        The end index of the tab's body content, or ``None`` when the
+        *target_tab_id* does not exist in the document at all.  A tab that
+        exists but has no ``documentTab`` (e.g. a non-document tab) raises
+        ``ValueError`` so callers can surface a precise error.
+    """
+
+    def walk(tabs: list) -> Optional[int]:
+        for tab in tabs:
+            tab_props = tab.get("tabProperties", {})
+            if tab_props.get("tabId") == target_tab_id:
+                document_tab = tab.get("documentTab")
+                if not document_tab:
+                    raise ValueError(
+                        f"Tab '{target_tab_id}' exists but is not a document tab "
+                        "(no documentTab data)."
+                    )
+                body = document_tab.get("body", {})
+                content = body.get("content", [])
+                if content:
+                    return content[-1].get("endIndex", 1)
+                return 1
+            child_tabs = tab.get("childTabs", [])
+            if child_tabs:
+                found = walk(child_tabs)
+                if found is not None:
+                    return found
+        return None
+
+    return walk(doc.get("tabs", []))
+
+
+class CreateDocTabResponse(TypedDict):
+    action: Literal["create"]
+    success: bool
+    message: str
+    tab_id: Optional[str]
+    requests_applied: int
+    link: Optional[str]
+
+
+class DeleteDocTabResponse(TypedDict):
+    action: Literal["delete"]
+    success: bool
+    message: str
+    tab_id: Optional[str]
+    requests_applied: int
+    link: Optional[str]
+
+
+class RenameDocTabResponse(TypedDict):
+    action: Literal["rename"]
+    success: bool
+    message: str
+    tab_id: Optional[str]
+    requests_applied: int
+    link: Optional[str]
+
+
+class PopulateMarkdownTabResponse(TypedDict):
+    action: Literal["populate_from_markdown"]
+    success: bool
+    message: str
+    tab_id: Optional[str]
+    requests_applied: int
+    link: Optional[str]
+
+
+ManageDocTabResponse = Union[
+    CreateDocTabResponse,
+    DeleteDocTabResponse,
+    RenameDocTabResponse,
+    PopulateMarkdownTabResponse,
+]
+
+
 @server.tool()
-@handle_http_errors("insert_doc_tab", service_type="docs")
+@handle_http_errors("manage_doc_tab", service_type="docs")
 @require_google_service("docs", "docs_write")
-async def insert_doc_tab(
+async def manage_doc_tab(
     service: Any,
     user_google_email: str,
     document_id: str,
-    title: str,
-    index: int,
+    action: Literal["create", "rename", "delete", "populate_from_markdown"],
+    tab_id: Optional[str] = None,
+    title: Optional[str] = None,
+    index: Optional[int] = None,
     parent_tab_id: Optional[str] = None,
-) -> str:
+    markdown_text: Optional[str] = None,
+    replace_existing: bool = True,
+) -> ManageDocTabResponse:
     """
-    Inserts a new tab into a Google Doc.
+    Manage document tabs: create, rename, delete, or populate from Markdown.
 
     Args:
         user_google_email: User's Google email address
-        document_id: ID of the document to update
-        title: Title of the new tab
-        index: Position index for the new tab (0-based among sibling tabs)
-        parent_tab_id: Optional ID of a parent tab to nest the new tab under
+        document_id: ID of the document
+        action: Action to perform - "create", "rename", "delete", or "populate_from_markdown"
+        tab_id: Tab ID (required for rename, delete, populate_from_markdown; use inspect_doc_structure to find IDs)
+        title: Tab title (required for create; used by rename)
+        index: Position index for new tab, 0-based among siblings (required for create)
+        parent_tab_id: Optional parent tab ID to nest under (create only)
+        markdown_text: Markdown source to render (populate_from_markdown only)
+        replace_existing: Clear tab body before inserting markdown (default True)
 
     Returns:
-        str: Confirmation message with document link
+        dict with action result including document link
     """
-    logger.info(f"[insert_doc_tab] Doc={document_id}, title='{title}', index={index}")
-
-    request = create_insert_doc_tab_request(title, index, parent_tab_id)
-    result = await asyncio.to_thread(
-        service.documents()
-        .batchUpdate(documentId=document_id, body={"requests": [request]})
-        .execute
-    )
-
-    # Extract the new tab ID from the batchUpdate response
-    tab_id = None
-    if "replies" in result and result["replies"]:
-        reply = result["replies"][0]
-        if "createDocumentTab" in reply:
-            tab_id = reply["createDocumentTab"].get("tabProperties", {}).get("tabId")
-
+    logger.info(f"[manage_doc_tab] action={action}, doc={document_id}, tab_id={tab_id}")
     link = f"https://docs.google.com/document/d/{document_id}/edit"
-    msg = f"Inserted tab '{title}' at index {index} in document {document_id}."
-    if tab_id:
-        msg += f" Tab ID: {tab_id}."
-    if parent_tab_id:
-        msg += f" Nested under parent tab {parent_tab_id}."
-    return f"{msg} Link: {link}"
 
+    if action == "create":
+        if not title:
+            raise UserInputError("'title' is required for the 'create' action.")
+        if index is None:
+            raise UserInputError("'index' is required for the 'create' action.")
 
-@server.tool()
-@handle_http_errors("delete_doc_tab", service_type="docs")
-@require_google_service("docs", "docs_write")
-async def delete_doc_tab(
-    service: Any,
-    user_google_email: str,
-    document_id: str,
-    tab_id: str,
-) -> str:
-    """
-    Deletes a tab from a Google Doc by its tab ID.
+        request = create_insert_doc_tab_request(title, index, parent_tab_id)
+        result = await asyncio.to_thread(
+            service.documents()
+            .batchUpdate(documentId=document_id, body={"requests": [request]})
+            .execute
+        )
 
-    Args:
-        user_google_email: User's Google email address
-        document_id: ID of the document to update
-        tab_id: ID of the tab to delete (use inspect_doc_structure to find tab IDs)
+        new_tab_id = None
+        if "replies" in result and result["replies"]:
+            reply = result["replies"][0]
+            # Google returns under "addDocumentTab"; accept "createDocumentTab"
+            # as a defensive fallback.
+            for key in ("addDocumentTab", "createDocumentTab"):
+                if key in reply:
+                    new_tab_id = reply[key].get("tabProperties", {}).get("tabId")
+                    break
 
-    Returns:
-        str: Confirmation message with document link
-    """
-    logger.info(f"[delete_doc_tab] Doc={document_id}, tab_id='{tab_id}'")
+        msg = f"Inserted tab '{title}' at index {index} in document {document_id}."
+        if new_tab_id:
+            msg += f" Tab ID: {new_tab_id}."
+        if parent_tab_id:
+            msg += f" Nested under parent tab {parent_tab_id}."
+        return {
+            "action": action,
+            "success": True,
+            "message": msg,
+            "tab_id": new_tab_id,
+            "requests_applied": 1,
+            "link": link,
+        }
 
-    request = create_delete_doc_tab_request(tab_id)
+    if action == "delete":
+        if not tab_id:
+            raise UserInputError("'tab_id' is required for the 'delete' action.")
+
+        request = create_delete_doc_tab_request(tab_id)
+        await asyncio.to_thread(
+            service.documents()
+            .batchUpdate(documentId=document_id, body={"requests": [request]})
+            .execute
+        )
+        return {
+            "action": action,
+            "success": True,
+            "message": f"Deleted tab '{tab_id}' from document {document_id}.",
+            "tab_id": tab_id,
+            "requests_applied": 1,
+            "link": link,
+        }
+
+    if action == "rename":
+        if not tab_id:
+            raise UserInputError("'tab_id' is required for the 'rename' action.")
+        if not title:
+            raise UserInputError("'title' is required for the 'rename' action.")
+
+        request = create_update_doc_tab_request(tab_id, title)
+        await asyncio.to_thread(
+            service.documents()
+            .batchUpdate(documentId=document_id, body={"requests": [request]})
+            .execute
+        )
+        return {
+            "action": action,
+            "success": True,
+            "message": f"Renamed tab '{tab_id}' to '{title}' in document {document_id}.",
+            "tab_id": tab_id,
+            "requests_applied": 1,
+            "link": link,
+        }
+
+    # action == "populate_from_markdown"
+    if not tab_id:
+        raise UserInputError(
+            "'tab_id' is required for the 'populate_from_markdown' action."
+        )
+    if markdown_text is None:
+        raise UserInputError(
+            "'markdown_text' is required for the 'populate_from_markdown' action."
+        )
+
+    all_requests: List[dict] = []
+
+    doc = await asyncio.to_thread(
+        service.documents().get(documentId=document_id, includeTabsContent=True).execute
+    )
+    try:
+        tab_end = _find_tab_end_index(doc, tab_id)
+    except ValueError as exc:
+        raise UserInputError(str(exc))
+    if tab_end is None:
+        raise UserInputError(f"'{tab_id}' not found in document")
+
+    if replace_existing:
+        # tab_end includes the segment-terminating newline that Google Docs
+        # refuses to delete, so we delete up to tab_end - 1. Empty tabs
+        # (tab_end <= 2) have nothing to clear.
+        if tab_end > 2:
+            all_requests.append(
+                {
+                    "deleteContentRange": {
+                        "range": {
+                            "startIndex": 1,
+                            "endIndex": tab_end - 1,
+                            "tabId": tab_id,
+                        }
+                    }
+                }
+            )
+        all_requests.extend(markdown_to_docs_requests(markdown_text, tab_id=tab_id))
+    else:
+        # Append after existing content instead of prepending at index 1.
+        insert_at = tab_end - 1 if tab_end > 2 else 1
+        all_requests.extend(
+            markdown_to_docs_requests(
+                markdown_text, tab_id=tab_id, start_index=insert_at
+            )
+        )
+
+    if not all_requests:
+        return {
+            "action": action,
+            "success": True,
+            "message": (
+                f"No changes applied to tab '{tab_id}' in document {document_id}; "
+                "markdown produced no requests."
+            ),
+            "tab_id": tab_id,
+            "requests_applied": 0,
+            "link": link,
+        }
+
     await asyncio.to_thread(
         service.documents()
-        .batchUpdate(documentId=document_id, body={"requests": [request]})
+        .batchUpdate(documentId=document_id, body={"requests": all_requests})
         .execute
     )
 
-    link = f"https://docs.google.com/document/d/{document_id}/edit"
-    return f"Deleted tab '{tab_id}' from document {document_id}. Link: {link}"
-
-
-@server.tool()
-@handle_http_errors("update_doc_tab", service_type="docs")
-@require_google_service("docs", "docs_write")
-async def update_doc_tab(
-    service: Any,
-    user_google_email: str,
-    document_id: str,
-    tab_id: str,
-    title: str,
-) -> str:
-    """
-    Renames a tab in a Google Doc.
-
-    Args:
-        user_google_email: User's Google email address
-        document_id: ID of the document to update
-        tab_id: ID of the tab to rename (use inspect_doc_structure to find tab IDs)
-        title: New title for the tab
-
-    Returns:
-        str: Confirmation message with document link
-    """
-    logger.info(
-        f"[update_doc_tab] Doc={document_id}, tab_id='{tab_id}', title='{title}'"
-    )
-
-    request = create_update_doc_tab_request(tab_id, title)
-    await asyncio.to_thread(
-        service.documents()
-        .batchUpdate(documentId=document_id, body={"requests": [request]})
-        .execute
-    )
-
-    link = f"https://docs.google.com/document/d/{document_id}/edit"
-    return (
-        f"Renamed tab '{tab_id}' to '{title}' in document {document_id}. Link: {link}"
-    )
+    return {
+        "action": action,
+        "success": True,
+        "message": (
+            f"Populated tab '{tab_id}' in document {document_id} "
+            f"from {len(markdown_text)} characters of markdown."
+        ),
+        "requests_applied": len(all_requests),
+        "tab_id": tab_id,
+        "link": link,
+    }
 
 
 # Create comment management tools for documents
