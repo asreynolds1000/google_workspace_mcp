@@ -202,7 +202,7 @@ Export a Google Doc to PDF and save it to Drive.
 ## Tabs
 
 ### manage_doc_tab
-Create, rename, delete, or populate tabs from markdown. Uses `action` to select the operation.
+Create, rename, delete, or populate tabs from Markdown. Uses `action` to select the operation.
 
 | Parameter | Type | Required | Default | Notes |
 |-----------|------|----------|---------|-------|

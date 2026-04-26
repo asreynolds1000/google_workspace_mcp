@@ -2334,16 +2334,26 @@ async def get_doc_as_markdown(
         return markdown.rstrip("\n") + "\n\n" + appendix
 
 
-def _find_tab_end_index(doc: dict, target_tab_id: str) -> int:
-    """Walk the document tabs tree and return the end index of target tab's body."""
+def _find_tab_end_index(doc: dict, target_tab_id: str) -> Optional[int]:
+    """Walk the document tabs tree and return the end index of target tab's body.
 
-    def walk(tabs: list) -> int:
+    Returns:
+        The end index of the tab's body content, or ``None`` when the
+        *target_tab_id* does not exist in the document at all.  A tab that
+        exists but has no ``documentTab`` (e.g. a non-document tab) raises
+        ``ValueError`` so callers can surface a precise error.
+    """
+
+    def walk(tabs: list) -> Optional[int]:
         for tab in tabs:
             tab_props = tab.get("tabProperties", {})
             if tab_props.get("tabId") == target_tab_id:
                 document_tab = tab.get("documentTab")
                 if not document_tab:
-                    return 0
+                    raise ValueError(
+                        f"Tab '{target_tab_id}' exists but is not a document tab "
+                        "(no documentTab data)."
+                    )
                 body = document_tab.get("body", {})
                 content = body.get("content", [])
                 if content:
@@ -2352,9 +2362,9 @@ def _find_tab_end_index(doc: dict, target_tab_id: str) -> int:
             child_tabs = tab.get("childTabs", [])
             if child_tabs:
                 found = walk(child_tabs)
-                if found:
+                if found is not None:
                     return found
-        return 0
+        return None
 
     return walk(doc.get("tabs", []))
 
@@ -2410,7 +2420,7 @@ async def manage_doc_tab(
     service: Any,
     user_google_email: str,
     document_id: str,
-    action: str,
+    action: Literal["create", "rename", "delete", "populate_from_markdown"],
     tab_id: Optional[str] = None,
     title: Optional[str] = None,
     index: Optional[int] = None,
@@ -2419,7 +2429,7 @@ async def manage_doc_tab(
     replace_existing: bool = True,
 ) -> ManageDocTabResponse:
     """
-    Manage document tabs: create, rename, delete, or populate from markdown.
+    Manage document tabs: create, rename, delete, or populate from Markdown.
 
     Args:
         user_google_email: User's Google email address
@@ -2435,12 +2445,6 @@ async def manage_doc_tab(
     Returns:
         dict with action result including document link
     """
-    valid_actions = ("create", "rename", "delete", "populate_from_markdown")
-    if action not in valid_actions:
-        raise UserInputError(
-            f"Invalid action '{action}'. Must be one of: {', '.join(valid_actions)}"
-        )
-
     logger.info(f"[manage_doc_tab] action={action}, doc={document_id}, tab_id={tab_id}")
     link = f"https://docs.google.com/document/d/{document_id}/edit"
 
@@ -2536,8 +2540,11 @@ async def manage_doc_tab(
     doc = await asyncio.to_thread(
         service.documents().get(documentId=document_id, includeTabsContent=True).execute
     )
-    tab_end = _find_tab_end_index(doc, tab_id)
-    if not tab_end:
+    try:
+        tab_end = _find_tab_end_index(doc, tab_id)
+    except ValueError as exc:
+        raise UserInputError(str(exc))
+    if tab_end is None:
         raise UserInputError(f"'{tab_id}' not found in document")
 
     if replace_existing:
@@ -2556,8 +2563,15 @@ async def manage_doc_tab(
                     }
                 }
             )
-
-    all_requests.extend(markdown_to_docs_requests(markdown_text, tab_id=tab_id))
+        all_requests.extend(markdown_to_docs_requests(markdown_text, tab_id=tab_id))
+    else:
+        # Append after existing content instead of prepending at index 1.
+        insert_at = tab_end - 1 if tab_end > 2 else 1
+        all_requests.extend(
+            markdown_to_docs_requests(
+                markdown_text, tab_id=tab_id, start_index=insert_at
+            )
+        )
 
     if not all_requests:
         return {
