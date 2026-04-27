@@ -285,6 +285,8 @@ def main():
                 _exit_with_env_error("WORKSPACE_MCP_TOOLS", _env_tools, "comma-separated valid service names")
             if _parsed:
                 args.tools = _parsed
+    elif _cli_has_permissions and os.getenv("WORKSPACE_MCP_TOOLS", "").strip():
+        logger.info("WORKSPACE_MCP_TOOLS ignored because --permissions was provided on the CLI")
     if args.tool_tier is None:
         _env_tier = os.getenv("WORKSPACE_MCP_TOOL_TIER", "").strip().lower()
         if _env_tier:
@@ -298,10 +300,15 @@ def main():
                 args.read_only = True
             elif _env_ro not in {"false", "0", "no"}:
                 _exit_with_env_error("WORKSPACE_MCP_READ_ONLY", _env_ro, "true/1/yes or false/0/no")
+    elif _cli_has_permissions and os.getenv("WORKSPACE_MCP_READ_ONLY", "").strip():
+        logger.info("WORKSPACE_MCP_READ_ONLY ignored because --permissions was provided on the CLI")
     if args.permissions is None and not _cli_has_read_only and not _cli_has_tools:
         _env_perms = os.getenv("WORKSPACE_MCP_PERMISSIONS", "").strip()
         if _env_perms:
             args.permissions = [p.lower() for p in _env_perms.split()]
+    elif (_cli_has_read_only or _cli_has_tools) and os.getenv("WORKSPACE_MCP_PERMISSIONS", "").strip():
+        _conflict = "--read-only" if _cli_has_read_only else "--tools"
+        logger.info("WORKSPACE_MCP_PERMISSIONS ignored because %s was provided on the CLI", _conflict)
     if args.transport is None:
         _env_transport = os.getenv("WORKSPACE_MCP_TRANSPORT", "").strip().lower()
         if _env_transport:
@@ -497,7 +504,7 @@ def main():
         try:
             tool_imports[tool]()
             safe_print(
-                f"   {tool_icons[tool]} {tool.title()} - Google {tool.title()} API integration"
+                f"   {tool_icons.get(tool, '🔧')} {tool.title()} - Google {tool.title()} API integration"
             )
         except ModuleNotFoundError as exc:
             logger.error("Failed to import tool '%s': %s", tool, exc, exc_info=True)
