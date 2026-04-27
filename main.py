@@ -240,7 +240,7 @@ def main():
         "--transport",
         choices=["stdio", "streamable-http"],
         default=None,
-        help="Transport mode: stdio (default) or streamable-http",
+        help="Transport mode: stdio (default; overridable via WORKSPACE_MCP_TRANSPORT) or streamable-http",
     )
     parser.add_argument(
         "--read-only",
@@ -307,8 +307,8 @@ def main():
         if _env_perms:
             args.permissions = [p.lower() for p in _env_perms.split()]
     elif (_cli_has_read_only or _cli_has_tools) and os.getenv("WORKSPACE_MCP_PERMISSIONS", "").strip():
-        _conflict = "--read-only" if _cli_has_read_only else "--tools"
-        logger.info("WORKSPACE_MCP_PERMISSIONS ignored because %s was provided on the CLI", _conflict)
+        _conflicts = [name for name, present in (("--read-only", _cli_has_read_only), ("--tools", _cli_has_tools)) if present]
+        logger.info("WORKSPACE_MCP_PERMISSIONS ignored because %s was provided on the CLI", " and ".join(_conflicts))
     if args.transport is None:
         _env_transport = os.getenv("WORKSPACE_MCP_TRANSPORT", "").strip().lower()
         if _env_transport:
