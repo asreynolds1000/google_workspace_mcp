@@ -13,7 +13,6 @@ from .sheets_tools import (
     create_sheet,
     list_sheet_tables,
     append_table_rows,
-    delete_sheet_rows,
     move_sheet_rows,
 )
 
@@ -26,6 +25,5 @@ __all__ = [
     "create_sheet",
     "list_sheet_tables",
     "append_table_rows",
-    "delete_sheet_rows",
     "move_sheet_rows",
 ]
