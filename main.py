@@ -269,7 +269,7 @@ def main():
     _cli_has_permissions = args.permissions is not None
     _cli_has_read_only = args.read_only
 
-    if args.tools is None:
+    if args.tools is None and not _cli_has_permissions:
         _env_tools = os.getenv("WORKSPACE_MCP_TOOLS", "").strip()
         if _env_tools:
             _raw = [t.strip().lower() for t in _env_tools.split(",") if t.strip()]
