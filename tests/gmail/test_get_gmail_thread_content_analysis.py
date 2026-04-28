@@ -12,8 +12,7 @@ shape correctness, flag default, content parity across both modes.
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -132,7 +131,6 @@ async def test_analysis_keys_match_helper_contract():
         "thread_id",
         "thread_subject",
         "last_sender",
-        "last_sender_email",
         "last_timestamp",
         "ball_in_court_of",
         "message_count_by_sender",
@@ -141,16 +139,6 @@ async def test_analysis_keys_match_helper_contract():
         "message_count",
     }
     assert set(result["analysis"].keys()) == expected_keys
-    # `last_sender` is the raw From header; `last_sender_email` is the
-    # normalized form that can be used as a key into
-    # message_count_by_sender. They should be paired in every output.
-    if result["analysis"]["last_sender_email"] is not None:
-        assert "@" in result["analysis"]["last_sender_email"]
-        # And the normalized value must actually index into the sender counter
-        assert (
-            result["analysis"]["last_sender_email"]
-            in result["analysis"]["message_count_by_sender"]
-        )
 
 
 @pytest.mark.asyncio

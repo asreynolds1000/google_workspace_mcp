@@ -9,11 +9,9 @@ the Gmail threads.get(format='full') response shape.
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List
 
-import pytest
-
-from gmail.gmail_tools import (
+from gmail.gmail_helpers import (
     _analyze_thread_ownership_impl,
     _normalize_email,
     _parse_date_header,
@@ -97,6 +95,14 @@ class TestDateParsing:
         assert iso is not None
         assert dt is not None
 
+    def test_internal_date_takes_precedence_over_header_date(self):
+        iso, dt = _parse_date_header(
+            "Mon, 14 Apr 2026 10:00:00 -0400", "0"
+        )
+        assert dt is not None
+        assert dt.year == 1970
+        assert iso == "1970-01-01T00:00:00+00:00"
+
     def test_aware_non_utc_date_normalized_to_utc(self):
         """REGRESSION: `last_timestamp` must always be UTC-aware per the
         documented contract. `parsedate_to_datetime` returns an aware
@@ -143,6 +149,25 @@ class TestBallInCourt:
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
         assert result["ball_in_court_of"] == "them"
         assert result["last_sender"] == "Alex <alex@alexreynolds.com>"
+
+    def test_outbound_only_external_thread_ball_on_them(self):
+        thread = _thread(
+            "t-outbound",
+            [
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to="Vendor <vendor@example.com>",
+                ),
+            ],
+        )
+        result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
+        assert result["ball_in_court_of"] == "them"
+        assert result["participants"] == [
+            "alex@alexreynolds.com",
+            "vendor@example.com",
+        ]
 
     def test_plus_addressing_recognized_as_user(self):
         """alex+foo@alexreynolds.com is still Alex."""
@@ -274,6 +299,30 @@ class TestEmptyAndMalformed:
         assert result["ball_in_court_of"] == "user"
         assert result["last_sender"] == "Vendor <vendor@example.com>"
 
+    def test_internal_date_controls_last_message_when_header_date_skewed(self):
+        thread = _thread(
+            "t-skew",
+            [
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Wed, 15 Apr 2026 09:00:00 -0400",
+                    to="vendor@example.com",
+                    internal_date_ms="1776160800000",
+                ),
+                _msg(
+                    "m2",
+                    "Vendor <vendor@example.com>",
+                    "Tue, 14 Apr 2026 09:00:00 -0400",
+                    to="alex@alexreynolds.com",
+                    internal_date_ms="1776247200000",
+                ),
+            ],
+        )
+        result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
+        assert result["ball_in_court_of"] == "user"
+        assert result["last_sender"] == "Vendor <vendor@example.com>"
+
     def test_naive_and_aware_datetimes_do_not_raise(self):
         """REGRESSION: parsedate_to_datetime returns a naive datetime when
         the header has no timezone (e.g., 'Mon, 14 Apr 2026 09:00:00'). The
@@ -334,8 +383,8 @@ class TestEmptyAndMalformed:
         external-party check uses `participants`, a user → self non-draft
         plus a user → external DRAFT flips ball_in_court_of from None to
         'them', violating the documented self-only-thread contract. The fix:
-        compute external-party presence from sender_counter (already
-        draft-filtered), not participants."""
+        compute external-party presence from non-draft participants, not the
+        public participants list."""
         thread = _thread(
             "t-draft-leak",
             [
