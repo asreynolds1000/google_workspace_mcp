@@ -2206,10 +2206,15 @@ async def move_sheet_rows(
     dst_values = await asyncio.to_thread(
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"'{safe_destination}'")
+        .get(
+            spreadsheetId=spreadsheet_id,
+            range=f"'{safe_destination}'!A:A",
+            majorDimension="COLUMNS",
+        )
         .execute
     )
-    dst_data_rows = len(dst_values.get("values", []))
+    dst_columns = dst_values.get("values", [])
+    dst_data_rows = len(dst_columns[0]) if dst_columns else 0
 
     num_rows = end_row - start_row + 1
     paste_start = dst_data_rows
