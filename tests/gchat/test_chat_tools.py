@@ -182,6 +182,48 @@ async def test_get_messages_exposes_message_filter_and_forwards_it(mock_resolve)
     assert list_kwargs["filter"] == "thread.name = spaces/S/threads/T"
 
 
+@pytest.mark.asyncio
+async def test_get_messages_resolves_senders_sequentially(monkeypatch):
+    """get_messages should avoid concurrent People API sender resolution."""
+    state = {"current": 0, "max": 0}
+
+    async def fake_resolve(_people_service, sender_obj):
+        state["current"] += 1
+        state["max"] = max(state["max"], state["current"])
+        await asyncio.sleep(0.01)
+        try:
+            return f"Resolved {sender_obj['name']}"
+        finally:
+            state["current"] -= 1
+
+    msg_one = _make_message(text="First message", msg_name="spaces/S/messages/M1")
+    msg_one["sender"] = {"name": "users/1"}
+    msg_two = _make_message(text="Second message", msg_name="spaces/S/messages/M2")
+    msg_two["sender"] = {"name": "users/2"}
+
+    chat_service = Mock()
+    chat_service.spaces().get().execute.return_value = {"displayName": "Test Space"}
+    chat_service.spaces().messages().list().execute.return_value = {
+        "messages": [msg_one, msg_two]
+    }
+    people_service = Mock()
+
+    monkeypatch.setattr("gchat.chat_tools._resolve_sender", fake_resolve)
+
+    from gchat.chat_tools import get_messages
+
+    result = await _unwrap(get_messages)(
+        chat_service=chat_service,
+        people_service=people_service,
+        user_google_email="test@example.com",
+        space_id="spaces/S",
+    )
+
+    assert "Resolved users/1" in result
+    assert "Resolved users/2" in result
+    assert state["max"] == 1
+
+
 # ---------------------------------------------------------------------------
 # search_messages: attachment indicator
 # ---------------------------------------------------------------------------

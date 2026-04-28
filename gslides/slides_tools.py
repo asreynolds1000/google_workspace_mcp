@@ -9,6 +9,8 @@ import asyncio
 from typing import List, Dict, Any
 
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import handle_http_errors
@@ -17,7 +19,15 @@ from core.comments import create_comment_tools
 logger = logging.getLogger(__name__)
 
 
-@server.tool()
+@server.tool(
+    title="Create Presentation",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_presentation", service_type="slides")
 @require_google_service("slides", "slides")
 async def create_presentation(
@@ -54,7 +64,15 @@ async def create_presentation(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Presentation",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_presentation", is_read_only=True, service_type="slides")
 @require_google_service("slides", "slides_read")
 async def get_presentation(
@@ -147,7 +165,15 @@ Slides Breakdown:
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Batch Update Presentation",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("batch_update_presentation", service_type="slides")
 @require_google_service("slides", "slides")
 async def batch_update_presentation(
@@ -207,7 +233,15 @@ async def batch_update_presentation(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Page",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_page", is_read_only=True, service_type="slides")
 @require_google_service("slides", "slides_read")
 async def get_page(
@@ -268,7 +302,15 @@ Page Elements:
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Page Thumbnail",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_page_thumbnail", is_read_only=True, service_type="slides")
 @require_google_service("slides", "slides_read")
 async def get_page_thumbnail(

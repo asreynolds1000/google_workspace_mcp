@@ -12,6 +12,8 @@ from starlette.types import Scope, Receive, Send
 from starlette.requests import Request
 from starlette.middleware import Middleware
 
+from mcp.types import ToolAnnotations
+
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.google import GoogleProvider
 
@@ -657,7 +659,15 @@ async def legacy_oauth2_callback(request: Request) -> HTMLResponse:
         return create_server_error_response(str(e))
 
 
-@server.tool()
+@server.tool(
+    title="Start Google Auth",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 async def start_google_auth(
     service_name: str, user_google_email: str = USER_GOOGLE_EMAIL
 ) -> str:

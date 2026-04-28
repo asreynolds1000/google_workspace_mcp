@@ -19,6 +19,8 @@ import httpx
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from auth.oauth_config import is_stateless_mode
 from core.attachment_storage import get_attachment_storage, get_attachment_url
@@ -126,7 +128,15 @@ async def _get_file_size(file_obj: BinaryIO) -> int:
     return await asyncio.to_thread(_measure_size)
 
 
-@server.tool()
+@server.tool(
+    title="Search Drive Files",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("search_drive_files", is_read_only=True, service_type="drive")
 @require_google_service("drive", "drive_read")
 async def search_drive_files(
@@ -236,7 +246,15 @@ async def search_drive_files(
     return text_output
 
 
-@server.tool()
+@server.tool(
+    title="Get Drive File Content",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_drive_file_content", is_read_only=True, service_type="drive")
 @require_google_service("drive", "drive_read")
 async def get_drive_file_content(
@@ -346,7 +364,15 @@ async def get_drive_file_content(
     return header + body_text
 
 
-@server.tool()
+@server.tool(
+    title="Get Drive File Download URL",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_drive_file_download_url", is_read_only=True, service_type="drive"
 )
@@ -535,7 +561,15 @@ async def get_drive_file_download_url(
         )
 
 
-@server.tool()
+@server.tool(
+    title="List Drive Items",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("list_drive_items", is_read_only=True, service_type="drive")
 @require_google_service("drive", "drive_read")
 async def list_drive_items(
@@ -658,7 +692,15 @@ async def _create_drive_folder_impl(
     )
 
 
-@server.tool()
+@server.tool(
+    title="Create Drive Folder",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_drive_folder", service_type="drive")
 @require_google_service("drive", "drive_file")
 async def create_drive_folder(
@@ -687,7 +729,15 @@ async def create_drive_folder(
     )
 
 
-@server.tool()
+@server.tool(
+    title="Create Drive File",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_drive_file", service_type="drive")
 @require_google_service("drive", "drive_file")
 async def create_drive_file(
@@ -951,7 +1001,15 @@ def _detect_source_format(file_name: str, content: Optional[str] = None) -> str:
     return "text/plain"
 
 
-@server.tool()
+@server.tool(
+    title="Import to Google Doc",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("import_to_google_doc", service_type="drive")
 @require_google_service("drive", "drive_file")
 async def import_to_google_doc(
@@ -1182,7 +1240,15 @@ async def import_to_google_doc(
     return confirmation
 
 
-@server.tool()
+@server.tool(
+    title="Get Drive File Permissions",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_drive_file_permissions", is_read_only=True, service_type="drive"
 )
@@ -1291,7 +1357,15 @@ async def get_drive_file_permissions(
         return f"Error getting file permissions: {e}"
 
 
-@server.tool()
+@server.tool(
+    title="Check Drive File Public Access",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "check_drive_file_public_access", is_read_only=True, service_type="drive"
 )
@@ -1388,7 +1462,15 @@ async def check_drive_file_public_access(
     return "\n".join(output_parts)
 
 
-@server.tool()
+@server.tool(
+    title="Update Drive File",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("update_drive_file", is_read_only=False, service_type="drive")
 @require_google_service("drive", "drive_file")
 async def update_drive_file(
@@ -1565,7 +1647,15 @@ async def update_drive_file(
     return "\n".join(output_parts)
 
 
-@server.tool()
+@server.tool(
+    title="Get Drive Shareable Link",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_drive_shareable_link", is_read_only=True, service_type="drive")
 @require_google_service("drive", "drive_read")
 async def get_drive_shareable_link(
@@ -1625,7 +1715,15 @@ async def get_drive_shareable_link(
     return "\n".join(output_parts)
 
 
-@server.tool()
+@server.tool(
+    title="Manage Drive Access",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("manage_drive_access", is_read_only=False, service_type="drive")
 @require_google_service("drive", "drive_file")
 async def manage_drive_access(
@@ -1992,7 +2090,15 @@ async def manage_drive_access(
     return "\n".join(output_parts)
 
 
-@server.tool()
+@server.tool(
+    title="Copy Drive File",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("copy_drive_file", is_read_only=False, service_type="drive")
 @require_google_service("drive", "drive_file")
 async def copy_drive_file(
@@ -2064,7 +2170,15 @@ async def copy_drive_file(
     return "\n".join(output_parts)
 
 
-@server.tool()
+@server.tool(
+    title="Set Drive File Permissions",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "set_drive_file_permissions", is_read_only=False, service_type="drive"
 )

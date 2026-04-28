@@ -5,6 +5,7 @@ import logging
 import os
 import socket
 import sys
+from functools import partial
 from importlib import metadata, import_module
 from dotenv import load_dotenv
 
@@ -94,8 +95,27 @@ logger = logging.getLogger(__name__)
 
 configure_file_logging()
 
+# Single source of truth: service name -> module path.
+# VALID_SERVICES is derived from this mapping.
+SERVICE_MODULES = {
+    "gmail": "gmail.gmail_tools",
+    "drive": "gdrive.drive_tools",
+    "calendar": "gcalendar.calendar_tools",
+    "docs": "gdocs.docs_tools",
+    "sheets": "gsheets.sheets_tools",
+    "chat": "gchat.chat_tools",
+    "forms": "gforms.forms_tools",
+    "slides": "gslides.slides_tools",
+    "tasks": "gtasks.tasks_tools",
+    "contacts": "gcontacts.contacts_tools",
+    "search": "gsearch.search_tools",
+    "appscript": "gappsscript.apps_script_tools",
+}
+VALID_SERVICES = frozenset(SERVICE_MODULES)
+
 
 def safe_print(text):
+    """Print to stderr, falling back to debug logging when running as an MCP server."""
     # Don't print to stderr when running as MCP server via uvx to avoid JSON parsing errors
     # Check if we're running as MCP server (no TTY and uvx in process name)
     if not sys.stderr.isatty():
@@ -110,10 +130,13 @@ def safe_print(text):
 
 
 def configure_safe_logging():
+    """Replace console handlers with ASCII-safe formatters for Windows compatibility."""
+
     class SafeEnhancedFormatter(EnhancedLogFormatter):
         """Enhanced ASCII formatter with additional Windows safety."""
 
         def format(self, record):
+            """Format a log record, falling back to ASCII if encoding fails."""
             try:
                 return super().format(record)
             except UnicodeEncodeError:
@@ -206,20 +229,7 @@ def main():
     parser.add_argument(
         "--tools",
         nargs="*",
-        choices=[
-            "gmail",
-            "drive",
-            "calendar",
-            "docs",
-            "sheets",
-            "chat",
-            "forms",
-            "slides",
-            "tasks",
-            "contacts",
-            "search",
-            "appscript",
-        ],
+        choices=sorted(VALID_SERVICES),
         help="Specify which tools to register. If not provided, all tools are registered.",
     )
     parser.add_argument(
@@ -230,8 +240,8 @@ def main():
     parser.add_argument(
         "--transport",
         choices=["stdio", "streamable-http"],
-        default="stdio",
-        help="Transport mode: stdio (default) or streamable-http",
+        default=None,
+        help="Transport mode: stdio (default; overridable via WORKSPACE_MCP_TRANSPORT) or streamable-http",
     )
     parser.add_argument(
         "--read-only",
@@ -252,17 +262,114 @@ def main():
     )
     args = parser.parse_args()
 
-    # Validate mutually exclusive flags
+    # Env var fallbacks for plugin users who configure via userConfig.
+    # Non-empty but invalid values fail closed to prevent silent access widening.
+    # Skip env fallbacks for mutually exclusive flags that were set on the CLI
+    # to avoid conflicts (e.g. WORKSPACE_MCP_READ_ONLY=true + --permissions).
+    _cli_has_tools = args.tools is not None
+    _cli_has_permissions = args.permissions is not None
+    _cli_has_read_only = args.read_only
+
+    def _exit_with_env_error(name: str, value: str, expected: str) -> None:
+        print(f"Error: invalid {name} {value!r}; expected {expected}.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.tools is None and not _cli_has_permissions:
+        _env_tools = os.getenv("WORKSPACE_MCP_TOOLS", "").strip()
+        if _env_tools:
+            _parsed = [t.strip().lower() for t in _env_tools.split(",")]
+            _invalid = [t for t in _parsed if not t or t not in VALID_SERVICES]
+            if _invalid:
+                _exit_with_env_error(
+                    "WORKSPACE_MCP_TOOLS",
+                    _env_tools,
+                    "comma-separated valid service names",
+                )
+            args.tools = _parsed
+    elif _cli_has_permissions and os.getenv("WORKSPACE_MCP_TOOLS", "").strip():
+        logger.info(
+            "WORKSPACE_MCP_TOOLS ignored because --permissions was provided on the CLI"
+        )
+    if args.tool_tier is None:
+        _env_tier = os.getenv("WORKSPACE_MCP_TOOL_TIER", "").strip().lower()
+        if _env_tier:
+            if _env_tier not in {"core", "extended", "complete"}:
+                _exit_with_env_error(
+                    "WORKSPACE_MCP_TOOL_TIER", _env_tier, "core, extended, or complete"
+                )
+            args.tool_tier = _env_tier
+    if not args.read_only and not _cli_has_permissions:
+        _env_ro = os.getenv("WORKSPACE_MCP_READ_ONLY", "").strip().lower()
+        if _env_ro:
+            if _env_ro in {"true", "1", "yes"}:
+                args.read_only = True
+            elif _env_ro not in {"false", "0", "no"}:
+                _exit_with_env_error(
+                    "WORKSPACE_MCP_READ_ONLY", _env_ro, "true/1/yes or false/0/no"
+                )
+    elif _cli_has_permissions and os.getenv("WORKSPACE_MCP_READ_ONLY", "").strip():
+        logger.info(
+            "WORKSPACE_MCP_READ_ONLY ignored because --permissions was provided on the CLI"
+        )
+    if args.permissions is None and not _cli_has_read_only and not _cli_has_tools:
+        _env_perms = os.getenv("WORKSPACE_MCP_PERMISSIONS", "").strip()
+        if _env_perms:
+            args.permissions = [p.lower() for p in _env_perms.split()]
+    elif (_cli_has_read_only or _cli_has_tools) and os.getenv(
+        "WORKSPACE_MCP_PERMISSIONS", ""
+    ).strip():
+        _conflicts = [
+            name
+            for name, present in (
+                ("--read-only", _cli_has_read_only),
+                ("--tools", _cli_has_tools),
+            )
+            if present
+        ]
+        logger.info(
+            "WORKSPACE_MCP_PERMISSIONS ignored because %s was provided on the CLI",
+            " and ".join(_conflicts),
+        )
+    if args.transport is None:
+        _env_transport = os.getenv("WORKSPACE_MCP_TRANSPORT", "").strip().lower()
+        if _env_transport:
+            if _env_transport not in {"stdio", "streamable-http"}:
+                _exit_with_env_error(
+                    "WORKSPACE_MCP_TRANSPORT",
+                    _env_transport,
+                    "stdio or streamable-http",
+                )
+            args.transport = _env_transport
+        else:
+            args.transport = "stdio"
+
+    _env_http_port = os.getenv("WORKSPACE_MCP_HTTP_PORT", "").strip()
+    http_port = None
+    if _env_http_port:
+        try:
+            http_port = int(_env_http_port)
+            if not 1 <= http_port <= 65535:
+                raise ValueError("must be between 1 and 65535")
+        except ValueError as exc:
+            print(
+                f"Error: invalid WORKSPACE_MCP_HTTP_PORT '{_env_http_port}': {exc}.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # Validate mutually exclusive flags (settings can come from CLI flags or WORKSPACE_MCP_* env vars).
     if args.permissions and args.read_only:
         print(
-            "Error: --permissions and --read-only are mutually exclusive. "
+            "Error: --permissions and --read-only are mutually exclusive "
+            "(via CLI flag or WORKSPACE_MCP_PERMISSIONS / WORKSPACE_MCP_READ_ONLY env var). "
             "Use service:readonly within --permissions instead.",
             file=sys.stderr,
         )
         sys.exit(1)
     if args.permissions and args.tools is not None:
         print(
-            "Error: --permissions and --tools cannot be combined. "
+            "Error: --permissions and --tools cannot be combined "
+            "(via CLI flag or WORKSPACE_MCP_PERMISSIONS / WORKSPACE_MCP_TOOLS env var). "
             "Select services via --permissions (optionally with --tool-tier).",
             file=sys.stderr,
         )
@@ -344,20 +451,9 @@ def main():
         safe_print(f"   - {key}: {value}")
     safe_print("")
 
-    # Import tool modules to register them with the MCP server via decorators
+    # Import tool modules to register them with the MCP server via decorators.
     tool_imports = {
-        "gmail": lambda: import_module("gmail.gmail_tools"),
-        "drive": lambda: import_module("gdrive.drive_tools"),
-        "calendar": lambda: import_module("gcalendar.calendar_tools"),
-        "docs": lambda: import_module("gdocs.docs_tools"),
-        "sheets": lambda: import_module("gsheets.sheets_tools"),
-        "chat": lambda: import_module("gchat.chat_tools"),
-        "forms": lambda: import_module("gforms.forms_tools"),
-        "slides": lambda: import_module("gslides.slides_tools"),
-        "tasks": lambda: import_module("gtasks.tasks_tools"),
-        "contacts": lambda: import_module("gcontacts.contacts_tools"),
-        "search": lambda: import_module("gsearch.search_tools"),
-        "appscript": lambda: import_module("gappsscript.apps_script_tools"),
+        svc: partial(import_module, mod) for svc, mod in SERVICE_MODULES.items()
     }
 
     tool_icons = {
@@ -449,7 +545,7 @@ def main():
         try:
             tool_imports[tool]()
             safe_print(
-                f"   {tool_icons[tool]} {tool.title()} - Google {tool.title()} API integration"
+                f"   {tool_icons.get(tool, '🔧')} {tool.title()} - Google {tool.title()} API integration"
             )
         except ModuleNotFoundError as exc:
             logger.error("Failed to import tool '%s': %s", tool, exc, exc_info=True)
@@ -644,6 +740,12 @@ def main():
         safe_print("✅ Ready for MCP connections")
         safe_print("")
 
+        if args.transport == "streamable-http" and _env_http_port:
+            logger.warning(
+                "WORKSPACE_MCP_HTTP_PORT is ignored when transport is 'streamable-http'; "
+                "the primary server already serves HTTP on WORKSPACE_MCP_PORT/PORT."
+            )
+
         if args.transport == "streamable-http":
             # Check port availability before starting HTTP server
             try:
@@ -663,7 +765,63 @@ def main():
                 stateless_http=is_stateless_mode(),
             )
         else:
-            server.run()
+            if http_port is not None:
+                # Dual transport: stdio for MCP client + HTTP for workspace-cli
+                import asyncio
+                import uvicorn
+
+                # Bind sidecar to loopback only — auth provider is not initialized
+                # in stdio mode, so exposing this on 0.0.0.0 would allow unauthenticated access.
+                http_host = "127.0.0.1"
+
+                async def _run_dual() -> None:
+                    """Run stdio and HTTP transports concurrently."""
+                    http_available = True
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                            s.bind((http_host, http_port))
+                    except OSError:
+                        logger.warning(
+                            "Port %d in use, workspace-cli HTTP endpoint unavailable",
+                            http_port,
+                        )
+                        http_available = False
+
+                    http_srv = None
+                    http_task = None
+                    if http_available:
+                        app = server.http_app(path="/mcp")
+                        config = uvicorn.Config(
+                            app, host=http_host, port=http_port, log_level="warning"
+                        )
+                        http_srv = uvicorn.Server(config)
+                        http_task = asyncio.create_task(http_srv.serve())
+                        safe_print(
+                            f"   workspace-cli endpoint: http://{http_host}:{http_port}/mcp"
+                        )
+
+                    try:
+                        await server.run_stdio_async()
+                    finally:
+                        if http_srv:
+                            http_srv.should_exit = True
+                        if http_task:
+                            try:
+                                await asyncio.wait_for(http_task, timeout=5.0)
+                            except asyncio.TimeoutError:
+                                logger.warning(
+                                    "HTTP sidecar did not exit within 5s; cancelled"
+                                )
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as exc:
+                                logger.warning(
+                                    "HTTP sidecar ended with exception: %s", exc
+                                )
+
+                asyncio.run(_run_dual())
+            else:
+                server.run()
     except KeyboardInterrupt:
         safe_print("\n👋 Server shutdown requested")
         # Clean up OAuth callback server if running

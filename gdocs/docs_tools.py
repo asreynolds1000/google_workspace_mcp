@@ -16,6 +16,8 @@ from typing_extensions import TypedDict
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
+from mcp.types import ToolAnnotations
+
 # Auth & server utilities
 from auth.service_decorator import require_google_service, require_multiple_services
 from core.utils import extract_office_xml_text, handle_http_errors, UserInputError
@@ -68,7 +70,15 @@ logger = logging.getLogger(__name__)
 HEADER_FOOTER_RUNTIME_CANARY = "docs-hf-canary-20260328b"
 
 
-@server.tool()
+@server.tool(
+    title="Search Docs",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("search_docs", is_read_only=True, service_type="docs")
 @require_google_service("drive", "drive_read")
 async def search_docs(
@@ -110,7 +120,15 @@ async def search_docs(
     return "\n".join(output)
 
 
-@server.tool()
+@server.tool(
+    title="Get Doc Content",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_doc_content", is_read_only=True, service_type="docs")
 @require_multiple_services(
     [
@@ -306,7 +324,15 @@ async def get_doc_content(
     return header + body_text
 
 
-@server.tool()
+@server.tool(
+    title="List Docs in Folder",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("list_docs_in_folder", is_read_only=True, service_type="docs")
 @require_google_service("drive", "drive_read")
 async def list_docs_in_folder(
@@ -344,7 +370,15 @@ async def list_docs_in_folder(
     return "\n".join(out)
 
 
-@server.tool()
+@server.tool(
+    title="Create Doc",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_doc", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def create_doc(
@@ -402,7 +436,15 @@ async def create_doc(
     return msg
 
 
-@server.tool()
+@server.tool(
+    title="Modify Doc Text",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("modify_doc_text", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def modify_doc_text(
@@ -677,7 +719,15 @@ async def modify_doc_text(
     return f"{operation_summary} in document {document_id}.{text_info} Link: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Find and Replace Doc",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("find_and_replace_doc", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def find_and_replace_doc(
@@ -737,7 +787,15 @@ async def find_and_replace_doc(
     return f"Replaced {replacements} occurrence(s) of '{find_text}' with '{replace_text}' in document {document_id}. Link: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Insert Doc Elements",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("insert_doc_elements", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def insert_doc_elements(
@@ -819,7 +877,15 @@ async def insert_doc_elements(
     return f"Inserted {description} at index {index} in document {document_id}. Link: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Insert Doc Image",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("insert_doc_image", service_type="docs")
 @require_multiple_services(
     [
@@ -911,7 +977,15 @@ async def insert_doc_image(
     return f"Inserted {source_description}{size_info} at index {index} in document {document_id}. Link: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Update Doc Headers Footers",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("update_doc_headers_footers", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def update_doc_headers_footers(
@@ -981,7 +1055,15 @@ async def update_doc_headers_footers(
         return f"Error: {message}. Runtime: {HEADER_FOOTER_RUNTIME_CANARY}"
 
 
-@server.tool()
+@server.tool(
+    title="Batch Update Doc",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("batch_update_doc", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def batch_update_doc(
@@ -1238,7 +1320,15 @@ async def batch_update_doc(
         return f"Error: {message}"
 
 
-@server.tool()
+@server.tool(
+    title="Inspect Doc Structure",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("inspect_doc_structure", is_read_only=True, service_type="docs")
 @require_google_service("docs", "docs_read")
 async def inspect_doc_structure(
@@ -1578,7 +1668,15 @@ def _build_segment_inspection_entries(
     return list(entries.values())
 
 
-@server.tool()
+@server.tool(
+    title="Debug Docs Runtime Info",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("debug_docs_runtime_info", is_read_only=True, service_type="docs")
 @require_google_service("docs", "docs_read")
 async def debug_docs_runtime_info(
@@ -1607,7 +1705,15 @@ async def debug_docs_runtime_info(
     )
 
 
-@server.tool()
+@server.tool(
+    title="Create Table with Data",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_table_with_data", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def create_table_with_data(
@@ -1707,7 +1813,15 @@ async def create_table_with_data(
         return f"ERROR: {message}"
 
 
-@server.tool()
+@server.tool(
+    title="Debug Table Structure",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("debug_table_structure", is_read_only=True, service_type="docs")
 @require_google_service("docs", "docs_read")
 async def debug_table_structure(
@@ -1794,7 +1908,15 @@ async def debug_table_structure(
     return f"Table structure debug for table {table_index}:\n\n{json.dumps(debug_info, indent=2)}\n\nLink: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Export Doc to PDF",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("export_doc_to_pdf", service_type="drive")
 @require_google_service("drive", "drive_file")
 async def export_doc_to_pdf(
@@ -1949,7 +2071,15 @@ async def _get_paragraph_start_indices_in_range(
     return paragraph_starts or [start_index]
 
 
-@server.tool()
+@server.tool(
+    title="Update Paragraph Style",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("update_paragraph_style", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def update_paragraph_style(
@@ -2205,7 +2335,15 @@ async def update_paragraph_style(
     return f"Applied paragraph formatting ({', '.join(summary_parts)}) to range {start_index}-{end_index} in document {document_id}. Link: {link}"
 
 
-@server.tool()
+@server.tool(
+    title="Get Doc as Markdown",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_doc_as_markdown", is_read_only=True, service_type="docs")
 @require_multiple_services(
     [
@@ -2339,21 +2477,17 @@ def _find_tab_end_index(doc: dict, target_tab_id: str) -> Optional[int]:
 
     Returns:
         The end index of the tab's body content, or ``None`` when the
-        *target_tab_id* does not exist in the document at all.  A tab that
-        exists but has no ``documentTab`` (e.g. a non-document tab) raises
-        ``ValueError`` so callers can surface a precise error.
+        *target_tab_id* does not exist in the document or when the matching tab
+        has no ``documentTab``.
     """
 
     def walk(tabs: list) -> Optional[int]:
         for tab in tabs:
             tab_props = tab.get("tabProperties", {})
             if tab_props.get("tabId") == target_tab_id:
-                document_tab = tab.get("documentTab")
-                if not document_tab:
-                    raise ValueError(
-                        f"Tab '{target_tab_id}' exists but is not a document tab "
-                        "(no documentTab data)."
-                    )
+                if "documentTab" not in tab:
+                    return None
+                document_tab = tab.get("documentTab", {})
                 body = document_tab.get("body", {})
                 content = body.get("content", [])
                 if content:
@@ -2413,7 +2547,15 @@ ManageDocTabResponse = Union[
 ]
 
 
-@server.tool()
+@server.tool(
+    title="Manage Doc Tab",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("manage_doc_tab", service_type="docs")
 @require_google_service("docs", "docs_write")
 async def manage_doc_tab(

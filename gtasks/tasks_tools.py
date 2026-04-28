@@ -14,6 +14,8 @@ from mcp import Resource
 
 from auth.oauth_config import is_oauth21_enabled, is_external_oauth21_provider
 from auth.permissions import is_action_denied
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import UserInputError, handle_http_errors
@@ -111,7 +113,15 @@ def _validate_rfc3339_date(due: str) -> None:
         raise UserInputError(error_msg)
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="List Task Lists",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks_read")  # type: ignore
 @handle_http_errors("list_task_lists", service_type="tasks")  # type: ignore
 async def list_task_lists(
@@ -169,7 +179,15 @@ async def list_task_lists(
         raise Exception(message)
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="Get Task List",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks_read")  # type: ignore
 @handle_http_errors("get_task_list", service_type="tasks")  # type: ignore
 async def get_task_list(
@@ -304,7 +322,15 @@ async def _clear_completed_tasks_impl(
 # --- Consolidated manage_task_list tool ---
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="Manage Task List",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks")  # type: ignore
 @handle_http_errors("manage_task_list", service_type="tasks")  # type: ignore
 async def manage_task_list(
@@ -371,7 +397,15 @@ async def manage_task_list(
 # --- Task tools ---
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="List Tasks",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks_read")  # type: ignore
 @handle_http_errors("list_tasks", service_type="tasks")  # type: ignore
 async def list_tasks(
@@ -615,7 +649,15 @@ This can also occur due to filtering that excludes parent tasks while including 
     return response
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="Get Task",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks_read")  # type: ignore
 @handle_http_errors("get_task", service_type="tasks")  # type: ignore
 async def get_task(
@@ -858,7 +900,15 @@ async def _move_task_impl(
 # --- Consolidated manage_task tool ---
 
 
-@server.tool()  # type: ignore
+@server.tool(
+    title="Manage Task",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("tasks", "tasks")  # type: ignore
 @handle_http_errors("manage_task", service_type="tasks")  # type: ignore
 async def manage_task(

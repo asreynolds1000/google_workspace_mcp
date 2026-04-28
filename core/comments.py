@@ -9,11 +9,28 @@ import logging
 import asyncio
 from typing import Optional
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import handle_http_errors
 
 logger = logging.getLogger(__name__)
+
+
+READ_COMMENT_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=True,
+)
+
+MANAGE_COMMENT_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
+)
 
 
 async def _manage_comment_dispatch(
@@ -63,11 +80,12 @@ def create_comment_tools(app_name: str, file_id_param: str):
     # --- Consolidated tools ---
     list_func_name = f"list_{app_name}_comments"
     manage_func_name = f"manage_{app_name}_comment"
+    app_title = app_name.replace("_", " ").title()
 
     if file_id_param == "document_id":
 
         @require_google_service("drive", "drive_read")
-        @handle_http_errors(list_func_name, service_type="drive")
+        @handle_http_errors(list_func_name, is_read_only=True, service_type="drive")
         async def list_comments(
             service, user_google_email: str, document_id: str
         ) -> str:
@@ -101,7 +119,7 @@ def create_comment_tools(app_name: str, file_id_param: str):
     elif file_id_param == "spreadsheet_id":
 
         @require_google_service("drive", "drive_read")
-        @handle_http_errors(list_func_name, service_type="drive")
+        @handle_http_errors(list_func_name, is_read_only=True, service_type="drive")
         async def list_comments(
             service, user_google_email: str, spreadsheet_id: str
         ) -> str:
@@ -135,7 +153,7 @@ def create_comment_tools(app_name: str, file_id_param: str):
     elif file_id_param == "presentation_id":
 
         @require_google_service("drive", "drive_read")
-        @handle_http_errors(list_func_name, service_type="drive")
+        @handle_http_errors(list_func_name, is_read_only=True, service_type="drive")
         async def list_comments(
             service, user_google_email: str, presentation_id: str
         ) -> str:
@@ -168,8 +186,14 @@ def create_comment_tools(app_name: str, file_id_param: str):
 
     list_comments.__name__ = list_func_name
     manage_comment.__name__ = manage_func_name
-    server.tool()(list_comments)
-    server.tool()(manage_comment)
+    server.tool(
+        title=f"List {app_title} Comments",
+        annotations=READ_COMMENT_ANNOTATIONS,
+    )(list_comments)
+    server.tool(
+        title=f"Manage {app_title} Comment",
+        annotations=MANAGE_COMMENT_ANNOTATIONS,
+    )(manage_comment)
 
     return {
         "list_comments": list_comments,

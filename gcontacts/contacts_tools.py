@@ -14,6 +14,8 @@ from googleapiclient.errors import HttpError
 from mcp import Resource
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import UserInputError, handle_http_errors, StringList
@@ -661,7 +663,15 @@ async def _warmup_search_cache(service: Resource, user_google_email: str) -> Non
 # =============================================================================
 
 
-@server.tool()
+@server.tool(
+    title="List Contacts",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts_read")
 @handle_http_errors("list_contacts", service_type="people")
 async def list_contacts(
@@ -725,7 +735,15 @@ async def list_contacts(
     return response
 
 
-@server.tool()
+@server.tool(
+    title="Get Contact",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts_read")
 @handle_http_errors("get_contact", service_type="people")
 async def get_contact(
@@ -766,7 +784,15 @@ async def get_contact(
     return response
 
 
-@server.tool()
+@server.tool(
+    title="Search Contacts",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts_read")
 @handle_http_errors("search_contacts", service_type="people")
 async def search_contacts(
@@ -824,7 +850,15 @@ async def search_contacts(
     return response
 
 
-@server.tool()
+@server.tool(
+    title="Manage Contact",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts")
 @handle_http_errors("manage_contact", service_type="people")
 async def manage_contact(
@@ -1061,7 +1095,15 @@ async def manage_contact(
 # =============================================================================
 
 
-@server.tool()
+@server.tool(
+    title="List Contact Groups",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts_read")
 @handle_http_errors("list_contact_groups", service_type="people")
 async def list_contact_groups(
@@ -1124,7 +1166,15 @@ async def list_contact_groups(
     return response
 
 
-@server.tool()
+@server.tool(
+    title="Get Contact Group",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts_read")
 @handle_http_errors("get_contact_group", service_type="people")
 async def get_contact_group(
@@ -1194,7 +1244,15 @@ async def get_contact_group(
 # =============================================================================
 
 
-@server.tool()
+@server.tool(
+    title="Manage Contacts Batch",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts")
 @handle_http_errors("manage_contacts_batch", service_type="people")
 async def manage_contacts_batch(
@@ -1462,7 +1520,15 @@ async def manage_contacts_batch(
     return response
 
 
-@server.tool()
+@server.tool(
+    title="Manage Contact Group",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("people", "contacts")
 @handle_http_errors("manage_contact_group", service_type="people")
 async def manage_contact_group(
