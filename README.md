@@ -242,10 +242,17 @@ uv run main.py --transport streamable-http --tools gmail drive calendar
 | `WORKSPACE_MCP_BASE_URI` | | Base server URI (no port) — default `http://localhost` |
 | `WORKSPACE_MCP_PORT` | | Listening port — default `8000`. Also controls the stdio-mode OAuth callback port. The `PORT` env var takes precedence if set. |
 | `WORKSPACE_MCP_HOST` | | Bind host — default `0.0.0.0` |
+| `WORKSPACE_MCP_TRANSPORT` | | `stdio` or `streamable-http`; used when `--transport` is not passed |
+| `WORKSPACE_MCP_HTTP_PORT` | | Advanced legacy-stdio sidecar `/mcp` port for local `workspace-cli` access. Disabled when empty. Binds to `127.0.0.1` only and is accessible to local processes. |
 | `WORKSPACE_EXTERNAL_URL` | | External URL for reverse proxy setups |
 | `WORKSPACE_ATTACHMENT_DIR` | | Downloaded attachments dir and default trusted local attachment directory — default `~/.workspace-mcp/attachments/` |
 | `WORKSPACE_MCP_URL` | | Remote MCP endpoint URL for CLI |
 | `ALLOWED_FILE_DIRS` | | Colon-separated allowlist for local file reads |
+| **🧰 Tool Selection** | | |
+| `WORKSPACE_MCP_TOOLS` | | Comma-separated services, e.g. `gmail,drive,calendar`; empty means all services |
+| `WORKSPACE_MCP_TOOL_TIER` | | `core`, `extended`, or `complete`; empty means all tools |
+| `WORKSPACE_MCP_READ_ONLY` | | `true`, `1`, or `yes` to request read-only scopes and filter write tools |
+| `WORKSPACE_MCP_PERMISSIONS` | | Space-separated `service:level` entries, e.g. `gmail:send drive:readonly`; mutually exclusive with tools and read-only |
 | **🔑 OAuth 2.1 & Multi-User** | | |
 | `MCP_ENABLE_OAUTH21` | | `true` to enable OAuth 2.1 multi-user support |
 | `EXTERNAL_OAUTH21_PROVIDER` | | `true` for external OAuth flow with bearer tokens |
@@ -414,7 +421,7 @@ export GOOGLE_PSE_ENGINE_ID=\
 
 ### Start the Server
 
-> **📌 Transport Mode Guidance**: Use **streamable HTTP mode** (`--transport streamable-http`) for all modern MCP clients including Claude Code, VS Code MCP, and MCP Inspector. Stdio mode is only for clients with incomplete MCP specification support.
+> **📌 Transport Mode Guidance**: Use **streamable HTTP mode** (`--transport streamable-http`) for all modern MCP clients including Claude Code, VS Code MCP, and MCP Inspector. Stdio mode is only for clients with incomplete MCP specification support. For deployments, prefer OAuth 2.1 with stateless mode (`MCP_ENABLE_OAUTH21=true`, `WORKSPACE_MCP_STATELESS_MODE=true`) unless you need local attachment or credential storage.
 
 <details open>
 <summary>▶ <b>Launch Commands</b> <sub><sup>← Choose your startup mode</sup></sub></summary>
@@ -499,6 +506,16 @@ Granular permissions mode provides service-by-service scope control:
 - `--permissions` and `--read-only` are mutually exclusive
 - `--permissions` cannot be combined with `--tools`; enabled services are determined by the `--permissions` entries (optionally filtered by `--tool-tier`)
 - With `--tool-tier`, only tier-matched tools are enabled and only services that have tools in the selected tier are imported
+
+The `WORKSPACE_MCP_TOOLS`, `WORKSPACE_MCP_TOOL_TIER`, `WORKSPACE_MCP_READ_ONLY`, and `WORKSPACE_MCP_PERMISSIONS` environment variables provide the same controls for plugin and container installs. Empty strings are ignored. Non-empty malformed values fail closed at startup. Explicit CLI flags take precedence over mutually exclusive env vars.
+
+**Advanced legacy stdio sidecar**
+```bash
+# Optional bridge only for local legacy stdio sessions
+WORKSPACE_MCP_HTTP_PORT=8001 uv run main.py
+workspace-cli --url http://127.0.0.1:8001/mcp list
+```
+The sidecar is disabled unless `WORKSPACE_MCP_HTTP_PORT` is set. It only exists to bridge local `workspace-cli` calls into a legacy stdio server. Do not use it for normal Claude Code, VS Code, hosted, or multi-user deployments; use streamable HTTP with OAuth 2.1 instead. When enabled, it validates ports in the `1..65535` range, binds to `127.0.0.1`, and logs a warning if the port is already in use while keeping stdio running.
 
 **★ Tool Tiers**
 ```bash
