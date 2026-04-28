@@ -232,17 +232,17 @@ async def get_messages(
     if not messages:
         return f"No messages found in space '{space_name}' (ID: {space_id})."
 
-    # Pre-resolve unique senders in parallel
+    # Pre-resolve unique senders sequentially. The underlying googleapiclient/httplib2
+    # service objects are not safe to fan out across worker threads.
     sender_lookup = {}
     for msg in messages:
         s = msg.get("sender", {})
         key = s.get("name", "")
         if key and key not in sender_lookup:
             sender_lookup[key] = s
-    resolved_names = await asyncio.gather(
-        *[_resolve_sender(people_service, s) for s in sender_lookup.values()]
-    )
-    sender_map = dict(zip(sender_lookup.keys(), resolved_names))
+    sender_map = {}
+    for key, sender_obj in sender_lookup.items():
+        sender_map[key] = await _resolve_sender(people_service, sender_obj)
 
     output = [f"Messages from '{space_name}' (ID: {space_id}):\n"]
     for msg in messages:
