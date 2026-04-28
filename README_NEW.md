@@ -18,7 +18,7 @@
 
 ### One-Click Install (Claude Desktop)
 
-1. Download `google_workspace_mcp.dxt` from [Releases](https://github.com/taylorwilsdon/google_workspace_mcp/releases)
+1. Download the latest `.mcpb` bundle from [Releases](https://github.com/taylorwilsdon/google_workspace_mcp/releases)
 2. Double-click → Claude Desktop installs automatically
 3. Add your Google OAuth credentials in Settings → Extensions
 

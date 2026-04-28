@@ -277,9 +277,10 @@ uv run main.py --transport streamable-http --tools gmail drive calendar
 
 ### One-Click Claude Desktop Install
 
-> `.dxt` bundles server, deps & manifest — download → double-click → done. No terminal, no JSON editing.
+> `.mcpb` bundles server, manifest & dependency metadata — download → double-click → done. No terminal, no JSON editing.
+> Note: MCPB was formerly called DXT; the `dxt` CLI, `.dxt` files, and `@anthropic-ai/dxt` package have been renamed to `mcpb`, `.mcpb`, and `@anthropic-ai/mcpb`.
 
-1. **Download** the latest `google_workspace_mcp.dxt` from [Releases](https://github.com/taylorwilsdon/google_workspace_mcp/releases)
+1. **Download** the latest `.mcpb` bundle from [Releases](https://github.com/taylorwilsdon/google_workspace_mcp/releases)
 2. **Install** — double-click the file, Claude Desktop prompts to install
 3. **Configure** — Settings → Extensions → Google Workspace MCP, paste your OAuth credentials
 4. **Use it** — start a new Claude chat and call any Google Workspace tool
@@ -950,7 +951,7 @@ The server supports two transport modes:
 
 > **⚠️ Important**: Stdio mode is a **legacy fallback** for clients that don't properly implement the MCP specification with OAuth 2.1 and streamable HTTP support. **Claude Code and other modern MCP clients should use streamable HTTP mode** (`--transport streamable-http`) for proper OAuth flow and multi-user support.
 
-In general, you should use the one-click DXT installer package for Claude Desktop.
+In general, you should use the one-click MCPB bundle for Claude Desktop.
 If you are unable to for some reason, you can configure it manually via `claude_desktop_config.json`
 
 **Manual Claude Configuration (Alternative)**

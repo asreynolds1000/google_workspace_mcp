@@ -63,7 +63,7 @@ Plugin users cannot pass CLI args directly. Use `WORKSPACE_MCP_TOOLS` and `WORKS
 
 ## Deployment
 
-**Claude Desktop**: Use the [DXT installer package](https://github.com/taylorwilsdon/google_workspace_mcp/releases) for one-click setup, or configure manually via `claude_desktop_config.json`.
+**Claude Desktop**: Use the [MCPB bundle](https://github.com/taylorwilsdon/google_workspace_mcp/releases) for one-click setup, or configure manually via `claude_desktop_config.json`.
 
 **Docker**:
 ```bash
