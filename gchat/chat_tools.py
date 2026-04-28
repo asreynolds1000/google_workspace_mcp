@@ -602,13 +602,13 @@ async def create_reaction(
 @server.tool(
     title="Download Chat Attachment",
     annotations=ToolAnnotations(
-        readOnlyHint=True,
+        readOnlyHint=False,
         destructiveHint=False,
-        idempotentHint=True,
+        idempotentHint=False,
         openWorldHint=True,
     ),
 )
-@handle_http_errors("download_chat_attachment", is_read_only=True, service_type="chat")
+@handle_http_errors("download_chat_attachment", service_type="chat")
 @require_google_service("chat", "chat_read")
 async def download_chat_attachment(
     service,

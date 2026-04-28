@@ -440,7 +440,7 @@ async def create_doc(
     title="Modify Doc Text",
     annotations=ToolAnnotations(
         readOnlyHint=False,
-        destructiveHint=False,
+        destructiveHint=True,
         idempotentHint=False,
         openWorldHint=True,
     ),
@@ -723,7 +723,7 @@ async def modify_doc_text(
     title="Find and Replace Doc",
     annotations=ToolAnnotations(
         readOnlyHint=False,
-        destructiveHint=False,
+        destructiveHint=True,
         idempotentHint=False,
         openWorldHint=True,
     ),
@@ -981,7 +981,7 @@ async def insert_doc_image(
     title="Update Doc Headers Footers",
     annotations=ToolAnnotations(
         readOnlyHint=False,
-        destructiveHint=False,
+        destructiveHint=True,
         idempotentHint=False,
         openWorldHint=True,
     ),
@@ -2477,9 +2477,8 @@ def _find_tab_end_index(doc: dict, target_tab_id: str) -> Optional[int]:
 
     Returns:
         The end index of the tab's body content, or ``None`` when the
-        *target_tab_id* does not exist in the document at all. A tab that
-        exists but has no ``documentTab`` returns ``0`` so callers can
-        distinguish non-document/container tabs from empty document tabs.
+        *target_tab_id* does not exist in the document or when the matching tab
+        has no ``documentTab``.
     """
 
     def walk(tabs: list) -> Optional[int]:
@@ -2487,7 +2486,7 @@ def _find_tab_end_index(doc: dict, target_tab_id: str) -> Optional[int]:
             tab_props = tab.get("tabProperties", {})
             if tab_props.get("tabId") == target_tab_id:
                 if "documentTab" not in tab:
-                    return 0
+                    return None
                 document_tab = tab.get("documentTab", {})
                 body = document_tab.get("body", {})
                 content = body.get("content", [])

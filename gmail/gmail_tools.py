@@ -1643,15 +1643,13 @@ async def get_gmail_messages_content_batch(
 @server.tool(
     title="Get Gmail Attachment Content",
     annotations=ToolAnnotations(
-        readOnlyHint=True,
+        readOnlyHint=False,
         destructiveHint=False,
-        idempotentHint=True,
+        idempotentHint=False,
         openWorldHint=True,
     ),
 )
-@handle_http_errors(
-    "get_gmail_attachment_content", is_read_only=True, service_type="gmail"
-)
+@handle_http_errors("get_gmail_attachment_content", service_type="gmail")
 @require_google_service("gmail", "gmail_read")
 async def get_gmail_attachment_content(
     service,
