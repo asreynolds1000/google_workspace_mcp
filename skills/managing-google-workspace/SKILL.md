@@ -153,6 +153,7 @@ For parameters: [references/docs.md](references/docs.md)
 | Get spreadsheet info | `get_spreadsheet_info` |
 | Create spreadsheet | `create_spreadsheet` |
 | Create sheet (tab) | `create_sheet` |
+| Move rows between sheets | `move_sheet_rows` |
 | List spreadsheets | `list_spreadsheets` |
 | Comments | `manage_spreadsheet_comment` / `list_spreadsheet_comments` |
 
