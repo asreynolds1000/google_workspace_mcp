@@ -100,8 +100,7 @@ def _analyze_thread_ownership_impl(
 
     # Thread subject: first message's Subject header
     first_headers = {
-        h["name"]: h["value"]
-        for h in messages[0].get("payload", {}).get("headers", [])
+        h["name"]: h["value"] for h in messages[0].get("payload", {}).get("headers", [])
     }
     thread_subject = first_headers.get("Subject") or None
 
@@ -117,8 +116,7 @@ def _analyze_thread_ownership_impl(
         is_draft = "DRAFT" in label_ids
 
         headers = {
-            h["name"]: h["value"]
-            for h in message.get("payload", {}).get("headers", [])
+            h["name"]: h["value"] for h in message.get("payload", {}).get("headers", [])
         }
 
         from_addr = headers.get("From", "")
@@ -127,9 +125,7 @@ def _analyze_thread_ownership_impl(
 
         # Collect participants from From/To/Cc using getaddresses (RFC-correct
         # parsing of quoted display names with embedded commas).
-        header_values = [
-            headers.get(hdr, "") for hdr in ("From", "To", "Cc")
-        ]
+        header_values = [headers.get(hdr, "") for hdr in ("From", "To", "Cc")]
         message_participants = set()
         for _n, addr in getaddresses([v for v in header_values if v]):
             norm = _normalize_email(addr) if addr else ""
@@ -170,9 +166,7 @@ def _analyze_thread_ownership_impl(
     last_dt, _last_message, last_headers = last_non_draft
     last_sender_raw = last_headers.get("From", "")
     _n, last_sender_email = parseaddr(last_sender_raw)
-    last_sender_norm = (
-        _normalize_email(last_sender_email) if last_sender_email else ""
-    )
+    last_sender_norm = _normalize_email(last_sender_email) if last_sender_email else ""
 
     # Ball-in-court: "user" = user owes reply, "them" = other party owes reply,
     # None = unresolvable. Use non-draft participants, so outbound-only threads
@@ -182,11 +176,7 @@ def _analyze_thread_ownership_impl(
         if normalized_user
         else non_draft_participants
     )
-    if (
-        not normalized_user
-        or "@" not in normalized_user
-        or "@" not in last_sender_norm
-    ):
+    if not normalized_user or "@" not in normalized_user or "@" not in last_sender_norm:
         ball_in_court_of = None
     elif not external_participants:
         ball_in_court_of = None

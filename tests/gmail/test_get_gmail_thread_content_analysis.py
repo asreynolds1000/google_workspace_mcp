@@ -70,9 +70,7 @@ def _build_mock_service(thread_response: dict) -> MagicMock:
     with the given thread_response. Matches the shape that
     `@require_google_service` injects."""
     service = MagicMock()
-    service.users.return_value.threads.return_value.get.return_value.execute.return_value = (
-        thread_response
-    )
+    service.users.return_value.threads.return_value.get.return_value.execute.return_value = thread_response
     return service
 
 

@@ -58,9 +58,7 @@ class TestNormalization:
         assert _normalize_email("Alex@Scopestack.io") == "alex@scopestack.io"
 
     def test_plus_addressing_stripped(self):
-        assert (
-            _normalize_email("alex+foo@scopestack.io") == "alex@scopestack.io"
-        )
+        assert _normalize_email("alex+foo@scopestack.io") == "alex@scopestack.io"
 
     def test_display_name_stripped(self):
         assert (
@@ -75,9 +73,7 @@ class TestNormalization:
 
 class TestDateParsing:
     def test_rfc822_header_parsed(self):
-        iso, dt = _parse_date_header(
-            "Thu, 17 Apr 2026 10:00:00 -0400", None
-        )
+        iso, dt = _parse_date_header("Thu, 17 Apr 2026 10:00:00 -0400", None)
         assert iso is not None
         assert dt is not None
 
@@ -96,9 +92,7 @@ class TestDateParsing:
         assert dt is not None
 
     def test_internal_date_takes_precedence_over_header_date(self):
-        iso, dt = _parse_date_header(
-            "Mon, 14 Apr 2026 10:00:00 -0400", "0"
-        )
+        iso, dt = _parse_date_header("Mon, 14 Apr 2026 10:00:00 -0400", "0")
         assert dt is not None
         assert dt.year == 1970
         assert iso == "1970-01-01T00:00:00+00:00"
@@ -109,9 +103,7 @@ class TestDateParsing:
         datetime carrying the header's original offset (e.g., -0400). The
         previous implementation only coerced naive → UTC, so a well-formed
         non-UTC header would surface a non-UTC timestamp to callers."""
-        iso, dt = _parse_date_header(
-            "Mon, 14 Apr 2026 10:00:00 -0400", None
-        )
+        iso, dt = _parse_date_header("Mon, 14 Apr 2026 10:00:00 -0400", None)
         assert dt is not None
         # Must be aware
         assert dt.tzinfo is not None
@@ -127,10 +119,18 @@ class TestBallInCourt:
         thread = _thread(
             "t1",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>", "Mon, 14 Apr 2026 09:00:00 -0400",
-                     to="vendor@example.com"),
-                _msg("m2", "Vendor <vendor@example.com>", "Tue, 15 Apr 2026 10:00:00 -0400",
-                     to="alex@alexreynolds.com"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to="vendor@example.com",
+                ),
+                _msg(
+                    "m2",
+                    "Vendor <vendor@example.com>",
+                    "Tue, 15 Apr 2026 10:00:00 -0400",
+                    to="alex@alexreynolds.com",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -142,8 +142,16 @@ class TestBallInCourt:
         thread = _thread(
             "t2",
             [
-                _msg("m1", "Vendor <vendor@example.com>", "Mon, 14 Apr 2026 09:00:00 -0400"),
-                _msg("m2", "Alex <alex@alexreynolds.com>", "Tue, 15 Apr 2026 10:00:00 -0400"),
+                _msg(
+                    "m1",
+                    "Vendor <vendor@example.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
+                _msg(
+                    "m2",
+                    "Alex <alex@alexreynolds.com>",
+                    "Tue, 15 Apr 2026 10:00:00 -0400",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -174,9 +182,16 @@ class TestBallInCourt:
         thread = _thread(
             "t3",
             [
-                _msg("m1", "Vendor <vendor@example.com>", "Mon, 14 Apr 2026 09:00:00 -0400"),
-                _msg("m2", "Alex <alex+newsletter@alexreynolds.com>",
-                     "Tue, 15 Apr 2026 10:00:00 -0400"),
+                _msg(
+                    "m1",
+                    "Vendor <vendor@example.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
+                _msg(
+                    "m2",
+                    "Alex <alex+newsletter@alexreynolds.com>",
+                    "Tue, 15 Apr 2026 10:00:00 -0400",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -190,9 +205,17 @@ class TestDrafts:
         thread = _thread(
             "t4",
             [
-                _msg("m1", "Vendor <vendor@example.com>", "Mon, 14 Apr 2026 09:00:00 -0400"),
-                _msg("m2", "Alex <alex@alexreynolds.com>", "Tue, 15 Apr 2026 10:00:00 -0400",
-                     draft=True),
+                _msg(
+                    "m1",
+                    "Vendor <vendor@example.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
+                _msg(
+                    "m2",
+                    "Alex <alex@alexreynolds.com>",
+                    "Tue, 15 Apr 2026 10:00:00 -0400",
+                    draft=True,
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -204,8 +227,12 @@ class TestDrafts:
         thread = _thread(
             "t5",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>",
-                     "Mon, 14 Apr 2026 09:00:00 -0400", draft=True),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    draft=True,
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -218,12 +245,25 @@ class TestParticipantsAndCounts:
         thread = _thread(
             "t6",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>", "Mon, 14 Apr 2026 09:00:00 -0400",
-                     to="vendor@example.com", cc="colleague@example.com"),
-                _msg("m2", "Vendor <vendor@example.com>", "Mon, 14 Apr 2026 11:00:00 -0400",
-                     to="alex@alexreynolds.com"),
-                _msg("m3", "Colleague <colleague@example.com>", "Tue, 15 Apr 2026 08:00:00 -0400",
-                     to="alex@alexreynolds.com"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to="vendor@example.com",
+                    cc="colleague@example.com",
+                ),
+                _msg(
+                    "m2",
+                    "Vendor <vendor@example.com>",
+                    "Mon, 14 Apr 2026 11:00:00 -0400",
+                    to="alex@alexreynolds.com",
+                ),
+                _msg(
+                    "m3",
+                    "Colleague <colleague@example.com>",
+                    "Tue, 15 Apr 2026 08:00:00 -0400",
+                    to="alex@alexreynolds.com",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -246,9 +286,12 @@ class TestParticipantsAndCounts:
         thread = _thread(
             "t-quoted-comma",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>",
-                     "Mon, 14 Apr 2026 09:00:00 -0400",
-                     to='"Doe, John" <john@example.com>, vendor@example.com'),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to='"Doe, John" <john@example.com>, vendor@example.com',
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -268,8 +311,12 @@ class TestParticipantsAndCounts:
         thread = _thread(
             "t7",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>", "Mon, 14 Apr 2026 09:00:00 -0400",
-                     to="alex+archive@alexreynolds.com"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to="alex+archive@alexreynolds.com",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -278,8 +325,9 @@ class TestParticipantsAndCounts:
 
 class TestEmptyAndMalformed:
     def test_empty_thread(self):
-        result = _analyze_thread_ownership_impl({"id": "empty", "messages": []},
-                                                 "alex@alexreynolds.com")
+        result = _analyze_thread_ownership_impl(
+            {"id": "empty", "messages": []}, "alex@alexreynolds.com"
+        )
         assert result["message_count"] == 0
         assert result["ball_in_court_of"] is None
         assert result["last_sender"] is None
@@ -289,10 +337,18 @@ class TestEmptyAndMalformed:
         thread = _thread(
             "t8",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>", "bad-date-value",
-                     internal_date_ms="1713360000000"),
-                _msg("m2", "Vendor <vendor@example.com>", "bad-date-value",
-                     internal_date_ms="1713450000000"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "bad-date-value",
+                    internal_date_ms="1713360000000",
+                ),
+                _msg(
+                    "m2",
+                    "Vendor <vendor@example.com>",
+                    "bad-date-value",
+                    internal_date_ms="1713450000000",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -333,16 +389,22 @@ class TestEmptyAndMalformed:
             "t-tz",
             [
                 # No timezone on Date header → naive after parsing
-                _msg("m1", "Alex <alex@alexreynolds.com>",
-                     "Mon, 14 Apr 2026 09:00:00",
-                     to="vendor@example.com"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00",
+                    to="vendor@example.com",
+                ),
                 # Malformed Date → falls back to internalDate (aware UTC).
                 # Pick a timestamp after m1's 2026-04-14 09:00 so the
                 # chronological comparison resolves m2 as the last message.
-                _msg("m2", "Vendor <vendor@example.com>",
-                     "not-a-valid-date",
-                     to="alex@alexreynolds.com",
-                     internal_date_ms="1776600000000"),  # ~Apr 2026
+                _msg(
+                    "m2",
+                    "Vendor <vendor@example.com>",
+                    "not-a-valid-date",
+                    to="alex@alexreynolds.com",
+                    internal_date_ms="1776600000000",
+                ),  # ~Apr 2026
             ],
         )
         # If regression, this raises TypeError from > comparison
@@ -357,7 +419,11 @@ class TestEmptyAndMalformed:
         thread = _thread(
             "t-bad-from",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>", "Mon, 14 Apr 2026 09:00:00 -0400"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
                 # Second message has no parseable email in From
                 _msg("m2", "No Email Here", "Tue, 15 Apr 2026 09:00:00 -0400"),
             ],
@@ -369,7 +435,11 @@ class TestEmptyAndMalformed:
         thread = _thread(
             "t9",
             [
-                _msg("m1", "Vendor <vendor@example.com>", "Mon, 14 Apr 2026 09:00:00 -0400"),
+                _msg(
+                    "m1",
+                    "Vendor <vendor@example.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -389,14 +459,20 @@ class TestEmptyAndMalformed:
             "t-draft-leak",
             [
                 # Non-draft: user → self (archival / forward-to-self)
-                _msg("m1", "Alex <alex@alexreynolds.com>",
-                     "Mon, 14 Apr 2026 09:00:00 -0400",
-                     to="alex+archive@alexreynolds.com"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                    to="alex+archive@alexreynolds.com",
+                ),
                 # Draft naming an external recipient, never sent
-                _msg("m2", "Alex <alex@alexreynolds.com>",
-                     "Tue, 15 Apr 2026 09:00:00 -0400",
-                     to="vendor@example.com",
-                     draft=True),
+                _msg(
+                    "m2",
+                    "Alex <alex@alexreynolds.com>",
+                    "Tue, 15 Apr 2026 09:00:00 -0400",
+                    to="vendor@example.com",
+                    draft=True,
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
@@ -418,13 +494,19 @@ class TestEmptyAndMalformed:
         thread = _thread(
             "t-malformed-leak",
             [
-                _msg("m1", "Alex <alex@alexreynolds.com>",
-                     "Mon, 14 Apr 2026 09:00:00 -0400"),
+                _msg(
+                    "m1",
+                    "Alex <alex@alexreynolds.com>",
+                    "Mon, 14 Apr 2026 09:00:00 -0400",
+                ),
                 # From is just a display name with no address. To is also
                 # just text — both should be filtered out by the @-guard.
-                _msg("m2", "No Email Here",
-                     "Tue, 15 Apr 2026 09:00:00 -0400",
-                     to="Just A Name"),
+                _msg(
+                    "m2",
+                    "No Email Here",
+                    "Tue, 15 Apr 2026 09:00:00 -0400",
+                    to="Just A Name",
+                ),
             ],
         )
         result = _analyze_thread_ownership_impl(thread, "alex@alexreynolds.com")
