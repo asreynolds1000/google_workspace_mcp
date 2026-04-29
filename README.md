@@ -21,6 +21,14 @@
 
 </div>
 
+<p align="center">
+  <a href="https://workspacemcp.com/docs">
+    <img src="https://img.shields.io/badge/Read%20the%20Docs-0969DA?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Read the Docs">
+  </a><br /><a href="https://workspacemcp.com/quick-start">
+    <img src="https://img.shields.io/badge/Quick%20Start-2EA44F?style=for-the-badge" alt="Quick Start Guide">
+  </a>
+</p>
+
 <div align="center">
 <a href="https://www.pulsemcp.com/servers/taylorwilsdon-google-workspace">
 <img width="375" src="https://github.com/user-attachments/assets/0794ef1a-dc1c-447d-9661-9c704d7acc9d" align="center"/>
