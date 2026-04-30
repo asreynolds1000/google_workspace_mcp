@@ -1281,6 +1281,13 @@ async def create_sheet(
     Returns:
         str: Confirmation message of the successful sheet creation.
     """
+    if insert_sheet_index is not None and (
+        isinstance(insert_sheet_index, bool)
+        or not isinstance(insert_sheet_index, int)
+        or insert_sheet_index < 0
+    ):
+        raise UserInputError("insert_sheet_index must be a non-negative integer.")
+
     if source_sheet_name is not None:
         logger.info(
             f"[create_sheet] Duplicate invoked. Email: '{user_google_email}', "

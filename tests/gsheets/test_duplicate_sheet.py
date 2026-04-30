@@ -111,3 +111,30 @@ async def test_duplicate_sheet_source_not_found():
         await _call_create_sheet(
             service, sheet_name="Copy", source_sheet_name="NonExistent"
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_sheet_name", "insert_sheet_index"),
+    [
+        (None, -1),
+        (None, "1"),
+        ("Original", -1),
+        ("Original", "1"),
+    ],
+)
+async def test_create_sheet_rejects_invalid_insert_sheet_index(
+    source_sheet_name, insert_sheet_index
+):
+    service = Mock()
+
+    with pytest.raises(
+        UserInputError, match="insert_sheet_index must be a non-negative integer"
+    ):
+        await _call_create_sheet(
+            service,
+            source_sheet_name=source_sheet_name,
+            insert_sheet_index=insert_sheet_index,
+        )
+
+    service.spreadsheets.assert_not_called()
