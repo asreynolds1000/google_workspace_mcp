@@ -14,6 +14,7 @@ from typing import Annotated, Any, List, Optional
 from pydantic import BeforeValidator
 from defusedxml import ElementTree as ET
 
+from fastmcp.exceptions import ToolError
 from googleapiclient.errors import HttpError
 from .api_enablement import get_api_enablement_message
 from auth.google_auth import GoogleAuthenticationError
@@ -608,6 +609,9 @@ def handle_http_errors(
                     raise Exception(message) from error
                 except TransientNetworkError:
                     # Re-raise without wrapping to preserve the specific error type
+                    raise
+                except ToolError:
+                    # Re-raise explicit tool errors so FastMCP can surface them directly.
                     raise
                 except GoogleAuthenticationError:
                     # Re-raise authentication errors without wrapping

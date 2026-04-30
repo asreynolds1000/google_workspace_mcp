@@ -49,28 +49,19 @@ from auth.scopes import (
     GMAIL_MODIFY_SCOPE,
     GMAIL_LABELS_SCOPE,
 )
-from gmail.gmail_helpers import _analyze_thread_ownership_impl
+from gmail.gmail_helpers import (
+    GMAIL_METADATA_HEADERS,
+    RAW_BODY_TRUNCATE_LIMIT,
+    _analyze_thread_ownership_impl,
+    _is_benign_signature_http_error,
+    _signature_fetch_tool_error,
+)
 
 logger = logging.getLogger(__name__)
 
 GMAIL_BATCH_SIZE = 25
 GMAIL_REQUEST_DELAY = 0.1
 HTML_BODY_TRUNCATE_LIMIT = 20000
-RAW_BODY_TRUNCATE_LIMIT = 20000
-
-GMAIL_METADATA_HEADERS = [
-    "Subject",
-    "From",
-    "To",
-    "Cc",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "Date",
-    "List-Unsubscribe",
-    "Precedence",
-    "List-Id",
-]
 LOW_VALUE_TEXT_PLACEHOLDERS = (
     "your client does not support html",
     "view this email in your browser",
@@ -505,25 +496,24 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
     """
     Fetch signature HTML from Gmail send-as settings.
 
-    Returns empty string when the account has no signature configured or the
-    OAuth token cannot access settings endpoints.
+    Returns empty string when the account has no signature configured or when
+    auth/scope errors mean the settings endpoint is unavailable.
     """
     try:
         response = await asyncio.to_thread(
             service.users().settings().sendAs().list(userId="me").execute
         )
     except HttpError as e:
-        status = getattr(getattr(e, "resp", None), "status", None)
-        if status in {401, 403}:
+        if _is_benign_signature_http_error(e):
             logger.info(
                 "Skipping Gmail signature fetch: missing auth/scope for settings endpoint."
             )
             return ""
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
     except Exception as e:
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
 
     send_as_entries = response.get("sendAs", [])
     if not send_as_entries:
@@ -540,6 +530,13 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
             return entry.get("signature", "") or ""
 
     return send_as_entries[0].get("signature", "") or ""
+
+
+async def _get_send_as_signature_html_for_tool(
+    service, from_email: Optional[str] = None
+) -> str:
+    """Fetch signature HTML and convert non-benign failures to tool errors."""
+    return await _get_send_as_signature_html(service, from_email=from_email)
 
 
 def _format_attachment_result(attached_count: int, requested_count: int) -> str:
@@ -1912,6 +1909,12 @@ async def send_gmail_message(
             description='Optional list of attachments. Each can have: "url" (fetch from URL — works with MCP attachment URLs from get_drive_file_download_url / get_gmail_attachment_content), OR "path" (file path, auto-encodes), OR "content" (standard base64, not urlsafe) + "filename". Optional "mime_type". Example: [{"url": "https://host/attachments/abc-123", "filename": "report.pdf"}]',
         ),
     ] = None,
+    include_signature: Annotated[
+        bool,
+        Field(
+            description="Whether to append the Gmail signature from Settings > Signature when available. Defaults to true.",
+        ),
+    ] = True,
 ) -> str:
     """
     Sends an email using the user's Gmail account. Supports both new emails and replies with optional attachments.
@@ -1941,6 +1944,11 @@ async def send_gmail_message(
         thread_id (Optional[str]): Optional Gmail thread ID to reply within. When provided, sends a reply.
         in_reply_to (Optional[str]): Optional RFC Message-ID of the message being replied to (e.g., '<message123@gmail.com>').
         references (Optional[str]): Optional chain of RFC Message-IDs for proper threading (e.g., '<msg1@gmail.com> <msg2@gmail.com>').
+        include_signature (bool): Whether to append Gmail signature HTML from send-as settings.
+            When include_signature is true and Gmail signature retrieval fails for benign reasons
+            (e.g., missing gmail.settings.basic scope), the send proceeds without a signature.
+            Non-benign failures such as quota/rate-limit or API errors raise ToolError and abort
+            the send.
 
     Returns:
         str: Confirmation message with the sent email's message ID.
@@ -2016,11 +2024,23 @@ async def send_gmail_message(
     # Prepare the email message
     # Use from_email (Send As alias) if provided, otherwise default to authenticated user
     sender_email = from_email or user_google_email
+
+    # Optionally append the Gmail signature from send-as settings, mirroring
+    # draft_gmail_message so sent mail respects the user's Settings > Signature.
+    send_body_content = body
+    if include_signature:
+        signature_html = await _get_send_as_signature_html_for_tool(
+            service, from_email=sender_email
+        )
+        send_body_content = _append_signature_to_body(
+            send_body_content, body_format, signature_html
+        )
+
     resolved_attachments = await _resolve_url_attachments(attachments)
     raw_message, thread_id_final, attached_count, attachment_errors = (
         _prepare_gmail_message(
             subject=subject,
-            body=body,
+            body=send_body_content,
             to=to,
             cc=cc,
             bcc=bcc,
@@ -2176,7 +2196,10 @@ async def draft_gmail_message(
               - 'filename' (required): Name of the file
               - 'mime_type' (optional): MIME type (defaults to 'application/octet-stream')
         include_signature (bool): Whether to append Gmail signature HTML from send-as settings.
-            If unavailable (e.g., missing gmail.settings.basic scope), the draft is still created without signature.
+            When include_signature is true and Gmail signature retrieval fails for benign reasons
+            (e.g., missing gmail.settings.basic scope), the draft proceeds without a signature.
+            Non-benign failures such as quota/rate-limit or API errors raise ToolError and abort
+            the draft.
         quote_original (bool): Whether to include the original message as a quoted reply.
             Requires thread_id to be provided. When enabled, fetches the original message
             and appends it below the signature. Defaults to False.
@@ -2246,7 +2269,7 @@ async def draft_gmail_message(
     draft_body = body
     signature_html = ""
     if include_signature:
-        signature_html = await _get_send_as_signature_html(
+        signature_html = await _get_send_as_signature_html_for_tool(
             service, from_email=sender_email
         )
 
