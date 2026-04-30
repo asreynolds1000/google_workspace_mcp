@@ -8,7 +8,35 @@ from datetime import datetime, timezone
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
 from typing import Any, Optional
 
+from fastmcp.exceptions import ToolError as ToolExecutionError
+from googleapiclient.errors import HttpError
+
 logger = logging.getLogger(__name__)
+
+RAW_BODY_TRUNCATE_LIMIT = 20000
+GMAIL_QUOTA_ERROR_MARKERS = (
+    "dailyLimitExceeded",
+    "quotaExceeded",
+    "rateLimitExceeded",
+    "userRateLimitExceeded",
+    "usageLimits",
+    "quota",
+    "rate limit",
+)
+
+GMAIL_METADATA_HEADERS = [
+    "Subject",
+    "From",
+    "To",
+    "Cc",
+    "Message-ID",
+    "In-Reply-To",
+    "References",
+    "Date",
+    "List-Unsubscribe",
+    "Precedence",
+    "List-Id",
+]
 
 
 def _normalize_email(address: str) -> str:
@@ -25,6 +53,35 @@ def _normalize_email(address: str) -> str:
     local, _, domain = addr.partition("@")
     local = local.split("+", 1)[0]
     return f"{local}@{domain}"
+
+
+def _http_error_status(error: HttpError) -> Optional[int]:
+    status = getattr(getattr(error, "resp", None), "status", None)
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_quota_or_rate_limit_error(error: HttpError) -> bool:
+    details = str(error).lower()
+    content = getattr(error, "content", None)
+    if isinstance(content, bytes):
+        details = f"{details} {content.decode('utf-8', errors='ignore').lower()}"
+    elif content:
+        details = f"{details} {str(content).lower()}"
+    return any(marker.lower() in details for marker in GMAIL_QUOTA_ERROR_MARKERS)
+
+
+def _is_benign_signature_http_error(error: HttpError) -> bool:
+    status = _http_error_status(error)
+    return status == 401 or (
+        status == 403 and not _is_quota_or_rate_limit_error(error)
+    )
+
+
+def _signature_fetch_tool_error(error: Exception) -> ToolExecutionError:
+    return ToolExecutionError(f"Failed to fetch Gmail send-as signatures: {error}")
 
 
 def _parse_date_header(
