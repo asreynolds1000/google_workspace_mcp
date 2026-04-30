@@ -21,6 +21,7 @@ from email.policy import SMTP
 from email.utils import formataddr
 
 import httpx
+from fastmcp.exceptions import ToolError as ToolExecutionError
 from mcp.types import ToolAnnotations
 
 from pydantic import Field
@@ -57,6 +58,15 @@ GMAIL_BATCH_SIZE = 25
 GMAIL_REQUEST_DELAY = 0.1
 HTML_BODY_TRUNCATE_LIMIT = 20000
 RAW_BODY_TRUNCATE_LIMIT = 20000
+GMAIL_QUOTA_ERROR_MARKERS = (
+    "dailyLimitExceeded",
+    "quotaExceeded",
+    "rateLimitExceeded",
+    "userRateLimitExceeded",
+    "usageLimits",
+    "quota",
+    "rate limit",
+)
 
 GMAIL_METADATA_HEADERS = [
     "Subject",
@@ -417,6 +427,35 @@ def _append_signature_to_body(
     return f"{body}{separator}{signature_text}"
 
 
+def _http_error_status(error: HttpError) -> Optional[int]:
+    status = getattr(getattr(error, "resp", None), "status", None)
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_quota_or_rate_limit_error(error: HttpError) -> bool:
+    details = str(error).lower()
+    content = getattr(error, "content", None)
+    if isinstance(content, bytes):
+        details = f"{details} {content.decode('utf-8', errors='ignore').lower()}"
+    elif content:
+        details = f"{details} {str(content).lower()}"
+    return any(marker.lower() in details for marker in GMAIL_QUOTA_ERROR_MARKERS)
+
+
+def _is_benign_signature_http_error(error: HttpError) -> bool:
+    status = _http_error_status(error)
+    return status == 401 or (
+        status == 403 and not _is_quota_or_rate_limit_error(error)
+    )
+
+
+def _signature_fetch_tool_error(error: Exception) -> ToolExecutionError:
+    return ToolExecutionError(f"Failed to fetch Gmail send-as signatures: {error}")
+
+
 async def _fetch_original_for_quote(
     service, thread_id: str, in_reply_to: Optional[str] = None
 ) -> Optional[dict]:
@@ -505,25 +544,24 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
     """
     Fetch signature HTML from Gmail send-as settings.
 
-    Returns empty string when the account has no signature configured or the
-    OAuth token cannot access settings endpoints.
+    Returns empty string when the account has no signature configured or when
+    auth/scope errors mean the settings endpoint is unavailable.
     """
     try:
         response = await asyncio.to_thread(
             service.users().settings().sendAs().list(userId="me").execute
         )
     except HttpError as e:
-        status = getattr(getattr(e, "resp", None), "status", None)
-        if status in {401, 403}:
+        if _is_benign_signature_http_error(e):
             logger.info(
                 "Skipping Gmail signature fetch: missing auth/scope for settings endpoint."
             )
             return ""
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
     except Exception as e:
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
 
     send_as_entries = response.get("sendAs", [])
     if not send_as_entries:
@@ -540,6 +578,27 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
             return entry.get("signature", "") or ""
 
     return send_as_entries[0].get("signature", "") or ""
+
+
+async def _get_send_as_signature_html_for_tool(
+    service, from_email: Optional[str] = None
+) -> str:
+    """Fetch signature HTML and convert non-benign failures to tool errors."""
+    try:
+        return await _get_send_as_signature_html(service, from_email=from_email)
+    except ToolExecutionError:
+        raise
+    except HttpError as e:
+        if _is_benign_signature_http_error(e):
+            logger.info(
+                "Skipping Gmail signature fetch: missing auth/scope for settings endpoint."
+            )
+            return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
+    except Exception as e:
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
 
 
 def _format_attachment_result(attached_count: int, requested_count: int) -> str:
@@ -2029,7 +2088,7 @@ async def send_gmail_message(
     # draft_gmail_message so sent mail respects the user's Settings > Signature.
     send_body_content = body
     if include_signature:
-        signature_html = await _get_send_as_signature_html(
+        signature_html = await _get_send_as_signature_html_for_tool(
             service, from_email=sender_email
         )
         send_body_content = _append_signature_to_body(
@@ -2266,7 +2325,7 @@ async def draft_gmail_message(
     draft_body = body
     signature_html = ""
     if include_signature:
-        signature_html = await _get_send_as_signature_html(
+        signature_html = await _get_send_as_signature_html_for_tool(
             service, from_email=sender_email
         )
 

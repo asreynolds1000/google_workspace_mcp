@@ -3,9 +3,12 @@ from email import policy
 from email.parser import BytesParser
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import Mock
 from contextlib import asynccontextmanager
 
+from fastmcp.exceptions import ToolError
+from googleapiclient.errors import HttpError
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -265,6 +268,75 @@ async def test_send_gmail_message_appends_gmail_signature_html():
 
     assert "<p>Hello</p>" in raw_text
     assert "Best,<br>Alice" in raw_text
+
+
+@pytest.mark.asyncio
+async def test_send_gmail_message_appends_send_as_alias_signature_html():
+    mock_service = Mock()
+    mock_service.users().messages().send().execute.return_value = {"id": "msg_alias"}
+    list_mock = mock_service.users().settings().sendAs().list
+    list_mock.return_value.execute.return_value = {
+        "sendAs": [
+            {
+                "sendAsEmail": "user@example.com",
+                "isPrimary": True,
+                "signature": "<div>Primary,<br>Alice</div>",
+            },
+            {
+                "sendAsEmail": "alias@example.com",
+                "isPrimary": False,
+                "signature": "<div>Alias,<br>Team</div>",
+            },
+        ]
+    }
+
+    result = await _unwrap(send_gmail_message)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        to="recipient@example.com",
+        subject="Alias signature test",
+        body="<p>Hello</p>",
+        body_format="html",
+        include_signature=True,
+        from_email="alias@example.com",
+    )
+
+    assert "Email sent! Message ID: msg_alias" in result
+    list_mock.assert_called_once_with(userId="me")
+
+    send_kwargs = (
+        mock_service.users.return_value.messages.return_value.send.call_args.kwargs
+    )
+    raw_message = send_kwargs["body"]["raw"]
+    raw_text = base64.urlsafe_b64decode(raw_message).decode("utf-8", errors="ignore")
+
+    assert "<p>Hello</p>" in raw_text
+    assert "Alias,<br>Team" in raw_text
+    assert "Primary,<br>Alice" not in raw_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [429, 403])
+async def test_send_gmail_message_surfaces_signature_rate_limit_error(status):
+    mock_service = Mock()
+    http_error = HttpError(
+        resp=SimpleNamespace(status=status, reason="Too Many Requests"),
+        content=b'{"error":{"reason":"rateLimitExceeded"}}',
+    )
+    mock_service.users().settings().sendAs().list().execute.side_effect = http_error
+
+    with pytest.raises(ToolError, match="Failed to fetch Gmail send-as signatures"):
+        await _unwrap(send_gmail_message)(
+            service=mock_service,
+            user_google_email="user@example.com",
+            to="recipient@example.com",
+            subject="Signature test",
+            body="<p>Hello</p>",
+            body_format="html",
+            include_signature=True,
+        )
+
+    assert mock_service.users.return_value.messages.return_value.send.call_count == 0
 
 
 @pytest.mark.asyncio
