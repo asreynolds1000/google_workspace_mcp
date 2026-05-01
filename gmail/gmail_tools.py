@@ -35,6 +35,7 @@ from core.config import (
 )
 from core.http_utils import ssrf_safe_stream
 from core.utils import (
+    GOOGLE_API_WRITE_RETRIES,
     handle_http_errors,
     validate_file_path,
     UserInputError,
@@ -2072,7 +2073,8 @@ async def send_gmail_message(
 
     # Send the message
     sent_message = await asyncio.to_thread(
-        service.users().messages().send(userId="me", body=send_body).execute
+        service.users().messages().send(userId="me", body=send_body).execute,
+        num_retries=GOOGLE_API_WRITE_RETRIES,
     )
     message_id = sent_message.get("id")
 
@@ -2348,7 +2350,8 @@ async def draft_gmail_message(
 
     # Create the draft
     created_draft = await asyncio.to_thread(
-        service.users().drafts().create(userId="me", body=draft_body).execute
+        service.users().drafts().create(userId="me", body=draft_body).execute,
+        num_retries=GOOGLE_API_WRITE_RETRIES,
     )
     draft_id = created_draft.get("id")
     attachment_info = _format_attachment_result(

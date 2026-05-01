@@ -20,7 +20,12 @@ from mcp.types import ToolAnnotations
 
 # Auth & server utilities
 from auth.service_decorator import require_google_service, require_multiple_services
-from core.utils import extract_office_xml_text, handle_http_errors, UserInputError
+from core.utils import (
+    GOOGLE_API_WRITE_RETRIES,
+    extract_office_xml_text,
+    handle_http_errors,
+    UserInputError,
+)
 from core.server import server
 from core.comments import create_comment_tools
 
@@ -2014,7 +2019,8 @@ async def export_doc_to_pdf(
                 fields="id, name, webViewLink, parents",
                 supportsAllDrives=True,
             )
-            .execute
+            .execute,
+            num_retries=GOOGLE_API_WRITE_RETRIES,
         )
 
         pdf_file_id = uploaded_file.get("id")

@@ -14,7 +14,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from gdrive.drive_helpers import build_drive_list_params
-from gdrive.drive_tools import list_drive_items, search_drive_files
+from gdrive.drive_tools import (
+    import_to_google_doc,
+    list_drive_items,
+    search_drive_files,
+)
 
 
 def _unwrap(tool):
@@ -333,6 +337,7 @@ def _make_file(
     link: str = "http://link",
     modified: str = "2024-01-01T00:00:00Z",
     size: str | None = None,
+    drive_id: str | None = None,
 ) -> dict:
     item = {
         "id": file_id,
@@ -343,6 +348,8 @@ def _make_file(
     }
     if size is not None:
         item["size"] = size
+    if drive_id is not None:
+        item["driveId"] = drive_id
     return item
 
 
@@ -391,19 +398,21 @@ async def test_create_drive_folder():
 
 
 def test_build_params_detailed_true_includes_extra_fields():
-    """detailed=True requests modifiedTime, webViewLink, and size from the API."""
+    """detailed=True requests modifiedTime, webViewLink, size, and driveId from the API."""
     params = build_drive_list_params(query="name='x'", page_size=10, detailed=True)
     assert "modifiedTime" in params["fields"]
     assert "webViewLink" in params["fields"]
     assert "size" in params["fields"]
+    assert "driveId" in params["fields"]
 
 
 def test_build_params_detailed_false_omits_extra_fields():
-    """detailed=False omits modifiedTime, webViewLink, and size from the API request."""
+    """detailed=False omits detailed metadata from the API request."""
     params = build_drive_list_params(query="name='x'", page_size=10, detailed=False)
     assert "modifiedTime" not in params["fields"]
     assert "webViewLink" not in params["fields"]
     assert "size" not in params["fields"]
+    assert "driveId" not in params["fields"]
 
 
 def test_build_params_detailed_false_keeps_core_fields():
@@ -433,6 +442,40 @@ def test_build_params_order_by_omits_whitespace_only_values():
     """Whitespace-only order_by values are omitted to avoid invalid API requests."""
     params = build_drive_list_params(query="q", page_size=5, order_by="   ")
     assert "orderBy" not in params
+
+
+# ---------------------------------------------------------------------------
+# import_to_google_doc — upload retries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@patch("gdrive.drive_tools.resolve_folder_id", new_callable=AsyncMock)
+async def test_import_to_google_doc_upload_uses_google_api_retries(mock_resolve_folder):
+    """Drive uploads use googleapiclient's built-in retry handling."""
+    mock_resolve_folder.return_value = "resolved_root"
+    mock_service = Mock()
+    mock_service.files().create().execute.return_value = {
+        "id": "doc123",
+        "name": "My Doc",
+        "webViewLink": "https://docs.google.com/document/d/doc123",
+        "mimeType": "application/vnd.google-apps.document",
+    }
+
+    result = await _unwrap(import_to_google_doc)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        file_name="My Doc.md",
+        content="# Title",
+        source_format="md",
+        folder_id="root",
+    )
+
+    assert "Successfully imported" in result
+    execute_kwargs = (
+        mock_service.files.return_value.create.return_value.execute.call_args.kwargs
+    )
+    assert execute_kwargs["num_retries"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -675,6 +718,33 @@ async def test_list_detailed_true_with_size(mock_resolve_folder):
 
 @pytest.mark.asyncio
 @patch("gdrive.drive_tools.resolve_folder_id", new_callable=AsyncMock)
+async def test_list_detailed_true_with_drive_id(mock_resolve_folder):
+    """When item has a driveId field, detailed=True includes it in output."""
+    mock_resolve_folder.return_value = "resolved_root"
+    mock_service = Mock()
+    mock_service.files().list().execute.return_value = {
+        "files": [
+            _make_file(
+                "id3",
+                "Shared File",
+                "application/pdf",
+                drive_id="shared-drive-123",
+            ),
+        ]
+    }
+
+    result = await _unwrap(list_drive_items)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        folder_id="root",
+        detailed=True,
+    )
+
+    assert "Drive ID: shared-drive-123" in result
+
+
+@pytest.mark.asyncio
+@patch("gdrive.drive_tools.resolve_folder_id", new_callable=AsyncMock)
 async def test_list_detailed_true_requests_extra_api_fields(mock_resolve_folder):
     """detailed=True passes full fields string to the Drive API."""
     mock_resolve_folder.return_value = "resolved_root"
@@ -692,6 +762,7 @@ async def test_list_detailed_true_requests_extra_api_fields(mock_resolve_folder)
     assert "modifiedTime" in call_kwargs["fields"]
     assert "webViewLink" in call_kwargs["fields"]
     assert "size" in call_kwargs["fields"]
+    assert "driveId" in call_kwargs["fields"]
 
 
 @pytest.mark.asyncio

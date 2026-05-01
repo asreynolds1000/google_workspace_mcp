@@ -22,6 +22,8 @@ from auth.oauth_config import is_oauth21_enabled, is_external_oauth21_provider
 
 logger = logging.getLogger(__name__)
 
+GOOGLE_API_WRITE_RETRIES = 3
+
 
 class TransientNetworkError(Exception):
     """Custom exception for transient network errors after retries."""

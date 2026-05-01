@@ -25,6 +25,7 @@ from auth.service_decorator import require_google_service
 from auth.oauth_config import is_stateless_mode
 from core.attachment_storage import get_attachment_storage, get_attachment_url
 from core.utils import (
+    GOOGLE_API_WRITE_RETRIES,
     IMAGE_MIME_TYPES,
     encode_image_content,
     extract_office_xml_text,
@@ -650,8 +651,11 @@ async def list_drive_items(
     for item in files:
         if detailed:
             size_str = f", Size: {item.get('size', 'N/A')}" if "size" in item else ""
+            drive_id_str = (
+                f", Drive ID: {item['driveId']}" if item.get("driveId") else ""
+            )
             formatted_items_text_parts.append(
-                f'- Name: "{item["name"]}" (ID: {item["id"]}, Type: {item["mimeType"]}{size_str}, Modified: {item.get("modifiedTime", "N/A")}) Link: {item.get("webViewLink", "#")}'
+                f'- Name: "{item["name"]}" (ID: {item["id"]}, Type: {item["mimeType"]}{size_str}{drive_id_str}, Modified: {item.get("modifiedTime", "N/A")}) Link: {item.get("webViewLink", "#")}'
             )
         else:
             formatted_items_text_parts.append(
@@ -851,7 +855,8 @@ async def create_drive_file(
                     fields="id, name, webViewLink",
                     supportsAllDrives=True,
                 )
-                .execute
+                .execute,
+                num_retries=GOOGLE_API_WRITE_RETRIES,
             )
         # Handle HTTP/HTTPS URLs
         elif parsed_url.scheme in ("http", "https"):
@@ -890,7 +895,8 @@ async def create_drive_file(
                             fields="id, name, webViewLink",
                             supportsAllDrives=True,
                         )
-                        .execute
+                        .execute,
+                        num_retries=GOOGLE_API_WRITE_RETRIES,
                     )
             else:
                 # Stream download to temp file with SSRF protection, then upload
@@ -937,7 +943,8 @@ async def create_drive_file(
                             fields="id, name, webViewLink",
                             supportsAllDrives=True,
                         )
-                        .execute
+                        .execute,
+                        num_retries=GOOGLE_API_WRITE_RETRIES,
                     )
         else:
             if not parsed_url.scheme:
@@ -959,7 +966,8 @@ async def create_drive_file(
                 fields="id, name, webViewLink",
                 supportsAllDrives=True,
             )
-            .execute
+            .execute,
+            num_retries=GOOGLE_API_WRITE_RETRIES,
         )
 
     link = created_file.get("webViewLink", "No link available")
@@ -1027,12 +1035,14 @@ async def import_to_google_doc(
 
     Google Drive automatically converts the source file to native Google Docs format,
     preserving formatting like headings, lists, bold, italic, etc.
+    For batch operations, prefer file_path for files on disk so callers do not need
+    to load full file contents into their context.
 
     Args:
         user_google_email (str): The user's Google email address. Required.
         file_name (str): The name for the new Google Doc (extension will be ignored).
-        content (Optional[str]): Text content for text-based formats (MD, TXT, HTML).
-        file_path (Optional[str]): Local file path for binary formats (DOCX, ODT). Supports file:// URLs.
+        content (Optional[str]): Text content for text-based formats. Use only for short snippets or content already in memory; for files on disk prefer file_path to avoid context-window costs.
+        file_path (Optional[str]): Local file path for any supported format (MD, TXT, HTML, DOCX, ODT, RTF). Supports file:// URLs. Use for files of any size; does not require loading content into the calling agent's context.
         file_url (Optional[str]): Remote URL to fetch the file from (http/https).
         source_format (Optional[str]): Source format hint ('md', 'markdown', 'docx', 'txt', 'html', 'rtf', 'odt').
                                        Auto-detected from file_name extension if not provided.
@@ -1042,6 +1052,9 @@ async def import_to_google_doc(
         str: Confirmation message with the new Google Doc link.
 
     Examples:
+        # Import a markdown file from disk (preferred for batch operations)
+        import_to_google_doc(file_name="My Doc.md", file_path="/path/to/my-doc.md", source_format="md")
+
         # Import markdown content directly
         import_to_google_doc(file_name="My Doc.md", content="# Title\\n\\nHello **world**")
 
@@ -1192,7 +1205,8 @@ async def import_to_google_doc(
                     fields="id, name, webViewLink, mimeType",
                     supportsAllDrives=True,
                 )
-                .execute
+                .execute,
+                num_retries=GOOGLE_API_WRITE_RETRIES,
             )
     else:
         media = MediaIoBaseUpload(
@@ -1215,7 +1229,8 @@ async def import_to_google_doc(
                 fields="id, name, webViewLink, mimeType",
                 supportsAllDrives=True,
             )
-            .execute
+            .execute,
+            num_retries=GOOGLE_API_WRITE_RETRIES,
         )
 
     result_mime = created_file.get("mimeType", "unknown")
