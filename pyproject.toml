@@ -74,6 +74,7 @@ valkey = [
 test = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.23.0",
+    "google-cloud-storage>=2.18.0",
     "requests>=2.32.3",
 ]
 release = [
@@ -83,6 +84,7 @@ release = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.23.0",
+    "google-cloud-storage>=2.18.0",
     "requests>=2.32.3",
     "ruff>=0.12.4",
     "tomlkit>=0.13.3",
@@ -99,6 +101,7 @@ valkey = [
 test = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.23.0",
+    "google-cloud-storage>=2.18.0",
     "requests>=2.32.3",
 ]
 release = [
@@ -108,6 +111,7 @@ release = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.23.0",
+    "google-cloud-storage>=2.18.0",
     "requests>=2.32.3",
     "ruff>=0.12.4",
     "tomlkit>=0.13.3",
@@ -126,6 +130,10 @@ addopts = "--ignore=tests/gappsscript/manual_test.py"
 pythonpath = ["."]
 markers = [
     "integration: marks tests as requiring real external services (deselect with '-m \"not integration\"')",
+]
+filterwarnings = [
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+    "ignore:PdfWriter.add_object\\(\\) is unavailable:UserWarning",
 ]
 
 [tool.setuptools.package-data]

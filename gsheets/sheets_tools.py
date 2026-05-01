@@ -1259,24 +1259,78 @@ async def create_sheet(
     service,
     user_google_email: str,
     spreadsheet_id: str,
-    sheet_name: str,
+    sheet_name: Optional[str] = None,
+    source_sheet_name: Optional[str] = None,
+    insert_sheet_index: Optional[int] = None,
 ) -> str:
-    """
-    Creates a new sheet within an existing spreadsheet.
+    """Creates a new sheet or duplicates an existing sheet (user_google_email: str, spreadsheet_id: str, sheet_name: Optional[str] = None, source_sheet_name: Optional[str] = None, insert_sheet_index: Optional[int] = None)."""
+    if insert_sheet_index is not None and (
+        isinstance(insert_sheet_index, bool)
+        or not isinstance(insert_sheet_index, int)
+        or insert_sheet_index < 0
+    ):
+        raise UserInputError("insert_sheet_index must be a non-negative integer.")
 
-    Args:
-        user_google_email (str): The user's Google email address. Required.
-        spreadsheet_id (str): The ID of the spreadsheet. Required.
-        sheet_name (str): The name of the new sheet. Required.
+    if source_sheet_name is not None:
+        source_sheet_name = source_sheet_name.strip()
+        if not source_sheet_name:
+            raise UserInputError("source_sheet_name must be a non-empty string")
 
-    Returns:
-        str: Confirmation message of the successful sheet creation.
-    """
+        logger.info(
+            f"[create_sheet] Duplicate invoked. Email: '{user_google_email}', "
+            f"Spreadsheet: {spreadsheet_id}, Source: {source_sheet_name}"
+        )
+
+        spreadsheet = await asyncio.to_thread(
+            service.spreadsheets()
+            .get(spreadsheetId=spreadsheet_id, fields="sheets.properties")
+            .execute
+        )
+
+        sheets = spreadsheet.get("sheets", [])
+        source_sheet = _select_sheet(sheets, source_sheet_name)
+        source_sheet_id = source_sheet["properties"]["sheetId"]
+
+        dup_request = {"sourceSheetId": source_sheet_id}
+        if sheet_name is not None:
+            dup_request["newSheetName"] = sheet_name
+        if insert_sheet_index is not None:
+            dup_request["insertSheetIndex"] = insert_sheet_index
+
+        request_body = {"requests": [{"duplicateSheet": dup_request}]}
+
+        response = await asyncio.to_thread(
+            service.spreadsheets()
+            .batchUpdate(spreadsheetId=spreadsheet_id, body=request_body)
+            .execute
+        )
+
+        new_props = response["replies"][0]["duplicateSheet"]["properties"]
+        new_id = new_props["sheetId"]
+        new_title = new_props["title"]
+
+        text_output = (
+            f"Successfully duplicated '{source_sheet_name}' to '{new_title}' "
+            f"(ID: {new_id}) in spreadsheet {spreadsheet_id} for {user_google_email}."
+        )
+
+        logger.info(
+            f"Successfully duplicated sheet for {user_google_email}. "
+            f"New sheet: '{new_title}' (ID: {new_id})"
+        )
+        return text_output
+
     logger.info(
         f"[create_sheet] Invoked. Email: '{user_google_email}', Spreadsheet: {spreadsheet_id}, Sheet: {sheet_name}"
     )
 
-    request_body = {"requests": [{"addSheet": {"properties": {"title": sheet_name}}}]}
+    add_request: dict = {"properties": {}}
+    if sheet_name is not None:
+        add_request["properties"]["title"] = sheet_name
+    if insert_sheet_index is not None:
+        add_request["properties"]["index"] = insert_sheet_index
+
+    request_body = {"requests": [{"addSheet": add_request}]}
 
     response = await asyncio.to_thread(
         service.spreadsheets()
@@ -1284,9 +1338,11 @@ async def create_sheet(
         .execute
     )
 
-    sheet_id = response["replies"][0]["addSheet"]["properties"]["sheetId"]
+    sheet_props = response["replies"][0]["addSheet"]["properties"]
+    sheet_id = sheet_props["sheetId"]
+    created_sheet_name = sheet_props.get("title", sheet_name or "Untitled")
 
-    text_output = f"Successfully created sheet '{sheet_name}' (ID: {sheet_id}) in spreadsheet {spreadsheet_id} for {user_google_email}."
+    text_output = f"Successfully created sheet '{created_sheet_name}' (ID: {sheet_id}) in spreadsheet {spreadsheet_id} for {user_google_email}."
 
     logger.info(
         f"Successfully created sheet for {user_google_email}. Sheet ID: {sheet_id}"

@@ -2211,6 +2211,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "google-cloud-storage" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "requests" },
@@ -2229,6 +2230,7 @@ release = [
     { name = "twine" },
 ]
 test = [
+    { name = "google-cloud-storage" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "requests" },
@@ -2239,6 +2241,7 @@ valkey = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "google-cloud-storage" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "requests" },
@@ -2254,6 +2257,7 @@ release = [
     { name = "twine" },
 ]
 test = [
+    { name = "google-cloud-storage" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "requests" },
@@ -2271,7 +2275,9 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.168.0" },
     { name = "google-auth-httplib2", specifier = ">=0.2.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.2.2" },
+    { name = "google-cloud-storage", marker = "extra == 'dev'", specifier = ">=2.18.0" },
     { name = "google-cloud-storage", marker = "extra == 'gcs'", specifier = ">=2.18.0" },
+    { name = "google-cloud-storage", marker = "extra == 'test'", specifier = ">=2.18.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "markdown-it-py", specifier = ">=3.0.0" },
     { name = "py-key-value-aio", specifier = ">=0.3.0" },
@@ -2298,6 +2304,7 @@ provides-extras = ["gcs", "disk", "valkey", "test", "release", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "requests", specifier = ">=2.32.3" },
@@ -2311,6 +2318,7 @@ release = [
     { name = "twine", specifier = ">=5.0.0" },
 ]
 test = [
+    { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "requests", specifier = ">=2.32.3" },

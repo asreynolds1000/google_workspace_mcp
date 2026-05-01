@@ -35,6 +35,11 @@ class _DeadThread:
         return False
 
 
+class _AliveThread:
+    def is_alive(self):
+        return True
+
+
 def test_ensure_oauth_callback_recreates_server_when_endpoint_changes(monkeypatch):
     _DummyMinimalOAuthServer.instances = []
     monkeypatch.setattr(
@@ -84,6 +89,8 @@ def test_is_actually_running_returns_false_when_server_thread_is_dead(monkeypatc
 
 def test_is_actually_running_treats_eaddrinuse_as_callback_port_in_use(monkeypatch):
     server = oauth_callback_server.MinimalOAuthServer(8000, "http://localhost")
+    server.is_running = True
+    server.server_thread = _AliveThread()
 
     class _FakeSocket:
         def __init__(self, *args, **kwargs):  # noqa: ARG002
