@@ -62,8 +62,7 @@ def test_configure_server_for_http_uses_protocol_auth_required_scopes(monkeypatc
     expected_default_scope = " ".join(sorted(server_module.get_current_scopes()))
     assert server_module.server.auth._default_scope_str == expected_default_scope
     assert (
-        server_module.server.auth._cimd_manager.default_scope
-        == expected_default_scope
+        server_module.server.auth._cimd_manager.default_scope == expected_default_scope
     )
 
 
