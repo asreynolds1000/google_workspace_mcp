@@ -82,7 +82,7 @@ def test_no_fork_repo_checkout() -> None:
 
                 # Must NOT reference the fork's repo
                 assert "pull_request.head.repo" not in repo_param, (
-                    f"Job \'{job_name}\' checkout uses fork repository: {repo_param}. "
+                    f"Job '{job_name}' checkout uses fork repository: {repo_param}. "
                     "This allows attacker-controlled code execution."
                 )
 
@@ -116,7 +116,7 @@ def test_uv_sync_not_on_fork_prs() -> None:
             )
 
             assert job_is_fork_guarded or step_is_fork_guarded, (
-                f"Job \'{job_name}\' runs a project-aware install "
+                f"Job '{job_name}' runs a project-aware install "
                 f"({run_cmd.strip().splitlines()[0]!r}) without a fork guard "
                 "on either the job or the step. Attacker-controlled "
                 "pyproject.toml/build hooks could execute on fork PRs."
@@ -151,12 +151,12 @@ def test_no_write_permissions_or_fork_guarded() -> None:
                 with_params: Dict[str, Any] = step.get("with", {})
                 repo_param: str = str(with_params.get("repository", ""))
                 assert "pull_request.head.repo" not in repo_param, (
-                    f"Job \'{job_name}\' has write permissions AND checks out fork code. "
+                    f"Job '{job_name}' has write permissions AND checks out fork code. "
                     "This is a critical security issue (CWE-77)."
                 )
 
         assert job_is_fork_guarded, (
-            f"Job \'{job_name}\' has write permissions but lacks a same-repo "
+            f"Job '{job_name}' has write permissions but lacks a same-repo "
             "`if` guard. Add `if: github.event.pull_request.head.repo.full_name "
             "== github.repository` (or equivalent) to prevent fork PRs from "
             "running with elevated permissions."
