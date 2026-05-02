@@ -25,7 +25,6 @@ from auth.oauth_config import (
     get_oauth_config,
     is_external_oauth21_provider,
     is_service_account_enabled,
-    is_dwd_request_impersonation_enabled,
 )
 from core.context import set_fastmcp_session_id
 from auth.scopes import (
@@ -289,16 +288,10 @@ async def _authenticate_service(
             )
 
         config = get_oauth_config()
-        if config.dwd_allow_request_impersonation and user_google_email:
+        if user_google_email:
             _validate_dwd_domain(user_google_email, config)
             target_email = user_google_email
         else:
-            if user_google_email and user_google_email != canonical_email:
-                logger.warning(
-                    f"[{tool_name}] Service account: ignoring caller-supplied email "
-                    f"'{user_google_email}', using configured USER_GOOGLE_EMAIL "
-                    f"'{canonical_email}'"
-                )
             target_email = canonical_email
 
         credentials = _get_service_account_credentials(resolved_scopes, target_email)

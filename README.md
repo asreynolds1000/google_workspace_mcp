@@ -281,7 +281,6 @@ uv run main.py --transport streamable-http --tools gmail drive calendar
 | **🔧 Service Account** | | |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_FILE` | | Path to service account JSON key file (domain-wide delegation) |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` | | Inline service account JSON key (alternative to file) |
-| `DWD_ALLOW_REQUEST_IMPERSONATION` | `false` | When `true`, caller-supplied `user_google_email` drives DWD impersonation |
 | `DWD_ALLOWED_DOMAINS` | | Comma-separated domain allowlist for per-request impersonation (optional) |
 | **🔍 Custom Search** | | |
 | `GOOGLE_PSE_API_KEY` | | API key for Programmable Search Engine |
@@ -1283,20 +1282,19 @@ uv run main.py
 **Key Behaviors:**
 - The OAuth callback server is not started (no interactive auth needed)
 - Credentials directory permission checks are skipped
-- By default, **all operations impersonate the configured `USER_GOOGLE_EMAIL`** — any email addresses supplied in tool calls are ignored. See *Per-Request Impersonation* below to change this.
+- When a tool call supplies `user_google_email`, service account mode uses that email as the domain-wide delegation impersonation subject.
+- `USER_GOOGLE_EMAIL` is still required and serves as the fallback when no caller email is provided.
 - The service account key is validated at startup (checks for required fields and correct type)
 
-**Per-Request Impersonation (opt-in):**
+**Per-Request Impersonation:**
 
-When `DWD_ALLOW_REQUEST_IMPERSONATION=true`, the caller-supplied `user_google_email` on each tool call is used as the DWD impersonation subject instead of the static `USER_GOOGLE_EMAIL`. This lets a single server instance act on behalf of multiple domain users.
+The caller-supplied `user_google_email` on each tool call is used as the DWD impersonation subject instead of the static `USER_GOOGLE_EMAIL`. This lets a single server instance act on behalf of multiple domain users.
 
 ```bash
-export DWD_ALLOW_REQUEST_IMPERSONATION=true
 # Optional: restrict which domains may be impersonated
 export DWD_ALLOWED_DOMAINS="corp.com,subsidiary.io"
 ```
 
-- `USER_GOOGLE_EMAIL` is still required and serves as the fallback when no caller email is provided.
 - If `DWD_ALLOWED_DOMAINS` is set, only emails whose domain appears in the comma-separated list are accepted; all others raise an authentication error.
 - If `DWD_ALLOWED_DOMAINS` is unset, any email accepted by the service account's delegation scope is allowed.
 
