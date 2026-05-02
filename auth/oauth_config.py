@@ -81,6 +81,18 @@ class OAuthConfig:
                 "Set GOOGLE_SERVICE_ACCOUNT_KEY_FILE or GOOGLE_SERVICE_ACCOUNT_KEY_JSON, "
                 "but not MCP_ENABLE_OAUTH21=true."
             )
+
+        # Per-request impersonation for domain-wide delegation
+        self.dwd_allow_request_impersonation = (
+            self.service_account_enabled
+            and os.getenv("DWD_ALLOW_REQUEST_IMPERSONATION", "false").lower() == "true"
+        )
+        _raw_domains = os.getenv("DWD_ALLOWED_DOMAINS", "")
+        self.dwd_allowed_domains: List[str] = (
+            [d.strip().lower() for d in _raw_domains.split(",") if d.strip()]
+            if self.service_account_enabled and _raw_domains
+            else []
+        )
         # Transport mode (will be set at runtime)
         self._transport_mode = "stdio"  # Default
 
@@ -302,6 +314,15 @@ class OAuthConfig:
         """
         return self.service_account_enabled
 
+    def is_dwd_request_impersonation_enabled(self) -> bool:
+        """
+        Check if per-request user impersonation is enabled for DWD mode.
+
+        Returns:
+            True if caller-supplied user_google_email should drive impersonation
+        """
+        return self.dwd_allow_request_impersonation
+
     def detect_oauth_version(self, request_params: Dict[str, Any]) -> str:
         """
         Detect OAuth version based on request parameters.
@@ -485,3 +506,8 @@ def is_external_oauth21_provider() -> bool:
 def is_service_account_enabled() -> bool:
     """Check if service account (domain-wide delegation) mode is enabled."""
     return get_oauth_config().is_service_account_enabled()
+
+
+def is_dwd_request_impersonation_enabled() -> bool:
+    """Check if per-request DWD impersonation is enabled."""
+    return get_oauth_config().is_dwd_request_impersonation_enabled()

@@ -25,6 +25,7 @@ from auth.oauth_config import (
     get_oauth_config,
     is_external_oauth21_provider,
     is_service_account_enabled,
+    is_dwd_request_impersonation_enabled,
 )
 from core.context import set_fastmcp_session_id
 from auth.scopes import (
@@ -252,6 +253,18 @@ def _get_service_account_credentials(
         ) from e
 
 
+def _validate_dwd_domain(email: str, config) -> None:
+    """Raise if email's domain is not in the configured allowlist (when set)."""
+    if not config.dwd_allowed_domains:
+        return
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain not in config.dwd_allowed_domains:
+        raise GoogleAuthenticationError(
+            f"Domain '{domain}' is not in DWD_ALLOWED_DOMAINS. "
+            f"Allowed: {', '.join(config.dwd_allowed_domains)}"
+        )
+
+
 async def _authenticate_service(
     use_oauth21: bool,
     service_name: str,
@@ -274,19 +287,27 @@ async def _authenticate_service(
             raise GoogleAuthenticationError(
                 "Service account mode requires USER_GOOGLE_EMAIL to be configured."
             )
-        if user_google_email != canonical_email:
-            logger.warning(
-                f"[{tool_name}] Service account: ignoring caller-supplied email "
-                f"'{user_google_email}', using configured USER_GOOGLE_EMAIL "
-                f"'{canonical_email}'"
-            )
-        credentials = _get_service_account_credentials(resolved_scopes, canonical_email)
+
+        config = get_oauth_config()
+        if config.dwd_allow_request_impersonation and user_google_email:
+            _validate_dwd_domain(user_google_email, config)
+            target_email = user_google_email
+        else:
+            if user_google_email and user_google_email != canonical_email:
+                logger.warning(
+                    f"[{tool_name}] Service account: ignoring caller-supplied email "
+                    f"'{user_google_email}', using configured USER_GOOGLE_EMAIL "
+                    f"'{canonical_email}'"
+                )
+            target_email = canonical_email
+
+        credentials = _get_service_account_credentials(resolved_scopes, target_email)
         service = build(service_name, service_version, credentials=credentials)
         logger.info(
             f"[{tool_name}] Authenticated {service_name} for "
-            f"{canonical_email} via service-account"
+            f"{target_email} via service-account"
         )
-        return service, canonical_email
+        return service, target_email
 
     if use_oauth21:
         logger.debug(f"[{tool_name}] Using OAuth 2.1 flow")
