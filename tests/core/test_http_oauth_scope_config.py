@@ -15,6 +15,9 @@ def test_configure_server_for_http_uses_protocol_auth_required_scopes(monkeypatc
                 valid_scopes=kwargs.get("valid_scopes"),
                 default_scopes=None,
             )
+            default_scope = " ".join(kwargs.get("required_scopes", []))
+            self._default_scope_str = default_scope
+            self._cimd_manager = SimpleNamespace(default_scope=default_scope)
 
     monkeypatch.setattr(server_module, "get_transport_mode", lambda: "streamable-http")
     monkeypatch.setattr(server_module, "GoogleProvider", FakeGoogleProvider)
@@ -55,6 +58,11 @@ def test_configure_server_for_http_uses_protocol_auth_required_scopes(monkeypatc
     assert (
         server_module.server.auth.client_registration_options.default_scopes
         == sorted(server_module.get_current_scopes())
+    )
+    expected_default_scope = " ".join(sorted(server_module.get_current_scopes()))
+    assert server_module.server.auth._default_scope_str == expected_default_scope
+    assert (
+        server_module.server.auth._cimd_manager.default_scope == expected_default_scope
     )
 
 

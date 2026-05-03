@@ -524,6 +524,13 @@ def configure_server_for_http():
                     provider.client_registration_options.default_scopes = (
                         provider_valid_scopes
                     )
+                # CIMD clients can bypass DCR defaults and fall back to FastMCP's
+                # internal scope string, so keep it aligned with valid scopes too.
+                cimd_default_scope = " ".join(provider_valid_scopes)
+                provider._default_scope_str = cimd_default_scope
+                cimd_manager = getattr(provider, "_cimd_manager", None)
+                if cimd_manager is not None:
+                    cimd_manager.default_scope = cimd_default_scope
                 # Enable protocol-level auth
                 server.auth = provider
                 logger.info(

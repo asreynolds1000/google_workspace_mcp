@@ -81,6 +81,14 @@ class OAuthConfig:
                 "Set GOOGLE_SERVICE_ACCOUNT_KEY_FILE or GOOGLE_SERVICE_ACCOUNT_KEY_JSON, "
                 "but not MCP_ENABLE_OAUTH21=true."
             )
+
+        # Optional per-request impersonation domain allowlist for service accounts.
+        _raw_domains = os.getenv("DWD_ALLOWED_DOMAINS", "")
+        self.dwd_allowed_domains: List[str] = (
+            [d.strip().lower() for d in _raw_domains.split(",") if d.strip()]
+            if self.service_account_enabled and _raw_domains
+            else []
+        )
         # Transport mode (will be set at runtime)
         self._transport_mode = "stdio"  # Default
 
