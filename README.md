@@ -764,14 +764,13 @@ cp .env.oauth21 .env
 | <sub>`create_drive_folder`</sub> | <sub>Core</sub> | <sub>Create empty folders in Drive or shared drives</sub> |
 | <sub>`import_to_google_doc`</sub> | <sub>Core</sub> | <sub>Import files (MD, DOCX, HTML, etc.) as Google Docs</sub> |
 | <sub>`get_drive_shareable_link`</sub> | <sub>Core</sub> | <sub>Get shareable links for a file</sub> |
-| <sub>`list_drive_items`</sub> | <sub>Extended</sub> | <sub>List folder contents</sub> |
+| <sub>`list_drive_items`</sub> | <sub>Extended</sub> | <sub>List folder contents or shared drives</sub> |
 | <sub>`copy_drive_file`</sub> | <sub>Extended</sub> | <sub>Copy existing files (templates) with optional renaming</sub> |
 | <sub>`update_drive_file`</sub> | <sub>Extended</sub> | <sub>Update file metadata, move between folders</sub> |
 | <sub>`manage_drive_access`</sub> | <sub>Extended</sub> | <sub>Grant, update, revoke permissions, and transfer ownership</sub> |
 | <sub>`set_drive_file_permissions`</sub> | <sub>Extended</sub> | <sub>Set link sharing and file-level sharing settings</sub> |
 | <sub>`get_drive_file_permissions`</sub> | <sub>Complete</sub> | <sub>Get detailed file permissions</sub> |
 | <sub>`check_drive_file_public_access`</sub> | <sub>Complete</sub> | <sub>Check public sharing status</sub> |
-| <sub>`list_shared_drives`</sub> | <sub>Complete</sub> | <sub>List shared drives with optional organizer info</sub> |
 
 #### 📧 Gmail <sub>[`gmail_tools.py`](gmail/gmail_tools.py)</sub>
 

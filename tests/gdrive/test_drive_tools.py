@@ -1119,6 +1119,124 @@ async def test_list_items_file_type_unknown_raises(mock_resolve_folder):
 
 
 # ---------------------------------------------------------------------------
+# list_drive_items — shared drive containers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_drive_items_can_list_shared_drives():
+    """resource_type='shared_drives' uses the shared drive list endpoint."""
+    mock_service = Mock()
+    mock_service.drives().list().execute.return_value = {
+        "drives": [
+            {
+                "id": "drive1",
+                "name": "Engineering",
+                "createdTime": "2024-01-01T00:00:00Z",
+                "hidden": False,
+                "capabilities": {"canManageMembers": True, "canEdit": True},
+                "restrictions": {"adminManagedRestrictions": False},
+            }
+        ],
+        "nextPageToken": "shared_next",
+    }
+
+    result = await _unwrap(list_drive_items)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        resource_type="shared_drives",
+        page_size=250,
+        page_token="shared_page",
+        query="name contains 'Engineering'",
+    )
+
+    call_kwargs = mock_service.drives.return_value.list.call_args.kwargs
+    assert call_kwargs["pageSize"] == 100
+    assert call_kwargs["pageToken"] == "shared_page"
+    assert call_kwargs["q"] == "name contains 'Engineering'"
+    assert "Found 1 shared drives" in result
+    assert 'Name: "Engineering" (ID: drive1' in result
+    assert result.endswith("nextPageToken: shared_next")
+    mock_service.files.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_drive_items_shared_drives_can_include_organizers():
+    """include_organizers adds organizer principals to shared drive output."""
+    mock_service = Mock()
+    mock_service.drives().list().execute.return_value = {
+        "drives": [
+            {
+                "id": "drive1",
+                "name": "Engineering",
+                "capabilities": {},
+                "restrictions": {},
+            }
+        ]
+    }
+    mock_service.permissions.return_value.list.return_value.execute.side_effect = [
+        {
+            "permissions": [
+                {
+                    "emailAddress": "lead@example.com",
+                    "displayName": "Eng Lead",
+                    "role": "organizer",
+                    "type": "user",
+                },
+                {
+                    "emailAddress": "reader@example.com",
+                    "role": "reader",
+                    "type": "user",
+                },
+            ],
+            "nextPageToken": "permission_page_2",
+        },
+        {
+            "permissions": [
+                {
+                    "emailAddress": "second-lead@example.com",
+                    "displayName": "Second Eng Lead",
+                    "role": "organizer",
+                    "type": "user",
+                }
+            ]
+        },
+    ]
+
+    result = await _unwrap(list_drive_items)(
+        service=mock_service,
+        user_google_email="user@example.com",
+        resource_type="shared_drives",
+        include_organizers=True,
+    )
+
+    permissions_calls = mock_service.permissions.return_value.list.call_args_list
+    assert permissions_calls[0].kwargs["fileId"] == "drive1"
+    assert permissions_calls[0].kwargs["supportsAllDrives"] is True
+    assert "pageToken" not in permissions_calls[0].kwargs
+    assert permissions_calls[1].kwargs["pageToken"] == "permission_page_2"
+    assert "Organizer (user): lead@example.com" in result
+    assert "Organizer (user): second-lead@example.com" in result
+    assert "reader@example.com" not in result
+
+
+@pytest.mark.asyncio
+async def test_list_drive_items_invalid_resource_type_raises():
+    """Unknown resource types are rejected before calling Drive APIs."""
+    mock_service = Mock()
+
+    with pytest.raises(ValueError, match="resource_type"):
+        await _unwrap(list_drive_items)(
+            service=mock_service,
+            user_google_email="user@example.com",
+            resource_type="calendars",
+        )
+
+    mock_service.files.assert_not_called()
+    mock_service.drives.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # OR-precedence grouping
 # ---------------------------------------------------------------------------
 
