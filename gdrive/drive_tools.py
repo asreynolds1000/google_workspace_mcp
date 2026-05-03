@@ -735,7 +735,8 @@ async def list_shared_drives(
         return f"No shared drives found for {user_google_email}."
 
     if include_organizers:
-        for d in drives:
+
+        async def _fetch_organizers(d: Dict[str, Any]) -> None:
             try:
                 perms = await asyncio.to_thread(
                     service.permissions()
@@ -749,12 +750,15 @@ async def list_shared_drives(
                     .execute
                 )
                 d["_organizers"] = [
-                    p for p in perms.get("permissions", []) if p.get("role") == "organizer"
+                    p
+                    for p in perms.get("permissions", [])
+                    if p.get("role") == "organizer"
                 ]
             except HttpError as e:
-                d["_organizers_error"] = (
-                    f"{e.resp.status if e.resp else 'unknown'}: {e._get_reason() if hasattr(e, '_get_reason') else str(e)}"
-                )
+                status = e.resp.status if e.resp else "unknown"
+                d["_organizers_error"] = f"{status}: {e}"
+
+        await asyncio.gather(*[_fetch_organizers(d) for d in drives])
 
     next_token = results.get("nextPageToken")
     parts = [f"Found {len(drives)} shared drives for {user_google_email}:"]
@@ -786,7 +790,11 @@ async def list_shared_drives(
                         )
                         display = o.get("displayName")
                         kind = o.get("type", "?")
-                        suffix = f' ("{display}")' if display and display != identifier else ""
+                        suffix = (
+                            f' ("{display}")'
+                            if display and display != identifier
+                            else ""
+                        )
                         parts.append(f"  Organizer ({kind}): {identifier}{suffix}")
     if next_token:
         parts.append(f"nextPageToken: {next_token}")
