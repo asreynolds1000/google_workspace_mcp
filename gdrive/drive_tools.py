@@ -667,6 +667,132 @@ async def list_drive_items(
     return text_output
 
 
+@server.tool(
+    title="List Shared Drives",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+@handle_http_errors("list_shared_drives", is_read_only=True, service_type="drive")
+@require_google_service("drive", "drive_read")
+async def list_shared_drives(
+    service,
+    user_google_email: str,
+    page_size: int = 100,
+    page_token: Optional[str] = None,
+    query: Optional[str] = None,
+    include_organizers: bool = False,
+) -> str:
+    """
+    Lists shared drives the authenticated user has access to.
+
+    Args:
+        user_google_email (str): The user's Google email address. Required.
+        page_size (int): Maximum number of shared drives per page (1-100). Defaults to 100.
+        page_token (Optional[str]): Page token from a previous response's nextPageToken.
+        query (Optional[str]): Drive query for filtering shared drives, e.g. "name contains 'TAT'".
+                                See https://developers.google.com/drive/api/guides/search-shareddrives.
+        include_organizers (bool): When True, performs an extra permissions.list call per drive
+                                    to resolve principals with the `organizer` role and includes
+                                    them in the output. Costs one API call per drive returned;
+                                    keep off for cheap enumeration. Defaults to False.
+
+    Returns:
+        str: Formatted list of shared drives with id, name, createdTime, hidden flag,
+             and selected capability/restriction flags. Includes a nextPageToken line
+             when more results are available.
+
+    Note:
+        Shared drives are owned by the workspace organization, not by individual users,
+        so this endpoint does not return an "owner" field. The `organizer` role (returned
+        when `include_organizers=True`) is the closest equivalent: principals with this
+        role on a given drive can manage members, content and settings.
+    """
+    logger.info(
+        f"[list_shared_drives] Invoked. Email: '{user_google_email}', page_size: {page_size}, "
+        f"include_organizers: {include_organizers}"
+    )
+
+    list_params: Dict[str, Any] = {
+        "pageSize": min(max(page_size, 1), 100),
+        "fields": (
+            "drives(id, name, createdTime, hidden, "
+            "restrictions, capabilities(canManageMembers, canEdit)), "
+            "nextPageToken"
+        ),
+    }
+    if page_token:
+        list_params["pageToken"] = page_token
+    if query:
+        list_params["q"] = query
+
+    results = await asyncio.to_thread(service.drives().list(**list_params).execute)
+    drives = results.get("drives", [])
+    if not drives:
+        return f"No shared drives found for {user_google_email}."
+
+    if include_organizers:
+        for d in drives:
+            try:
+                perms = await asyncio.to_thread(
+                    service.permissions()
+                    .list(
+                        fileId=d["id"],
+                        supportsAllDrives=True,
+                        useDomainAdminAccess=False,
+                        fields="permissions(emailAddress, displayName, role, type, domain)",
+                        pageSize=100,
+                    )
+                    .execute
+                )
+                d["_organizers"] = [
+                    p for p in perms.get("permissions", []) if p.get("role") == "organizer"
+                ]
+            except HttpError as e:
+                d["_organizers_error"] = (
+                    f"{e.resp.status if e.resp else 'unknown'}: {e._get_reason() if hasattr(e, '_get_reason') else str(e)}"
+                )
+
+    next_token = results.get("nextPageToken")
+    parts = [f"Found {len(drives)} shared drives for {user_google_email}:"]
+    for d in drives:
+        caps = d.get("capabilities") or {}
+        rest = d.get("restrictions") or {}
+        cap_flags = ", ".join(k for k, v in caps.items() if v) or "none"
+        rest_flags = ", ".join(k for k, v in rest.items() if v) or "none"
+        hidden = " [hidden]" if d.get("hidden") else ""
+        parts.append(
+            f'- Name: "{d["name"]}" (ID: {d["id"]}, Created: {d.get("createdTime", "N/A")}){hidden} '
+            f"Capabilities: {cap_flags}; Restrictions: {rest_flags}"
+        )
+        if include_organizers:
+            err = d.get("_organizers_error")
+            if err:
+                parts.append(f"  Organizers: <error: {err}>")
+            else:
+                organizers = d.get("_organizers", [])
+                if not organizers:
+                    parts.append("  Organizers: <none returned>")
+                else:
+                    for o in organizers:
+                        identifier = (
+                            o.get("emailAddress")
+                            or o.get("domain")
+                            or o.get("displayName")
+                            or o.get("type", "?")
+                        )
+                        display = o.get("displayName")
+                        kind = o.get("type", "?")
+                        suffix = f' ("{display}")' if display and display != identifier else ""
+                        parts.append(f"  Organizer ({kind}): {identifier}{suffix}")
+    if next_token:
+        parts.append(f"nextPageToken: {next_token}")
+    return "\n".join(parts)
+
+
 async def _create_drive_folder_impl(
     service,
     user_google_email: str,
@@ -1389,6 +1515,7 @@ async def check_drive_file_public_access(
     service,
     user_google_email: str,
     file_name: str,
+    drive_id: Optional[str] = None,
 ) -> str:
     """
     Searches for a file by name and checks if it has public link sharing enabled.
@@ -1396,23 +1523,34 @@ async def check_drive_file_public_access(
     Args:
         user_google_email (str): The user's Google email address. Required.
         file_name (str): The name of the file to check.
+        drive_id (Optional[str]): ID of the shared drive to scope the search to. When set, the
+                                  underlying files.list call uses corpora='drive' and the given
+                                  driveId, which is required to reliably find files that live only
+                                  in that shared drive. When None, behaviour is unchanged
+                                  (default API corpora applies).
 
     Returns:
         str: Information about the file's sharing status and whether it can be used in Google Docs.
     """
-    logger.info(f"[check_drive_file_public_access] Searching for {file_name}")
+    logger.info(
+        f"[check_drive_file_public_access] Searching for {file_name}"
+        + (f" within drive_id={drive_id}" if drive_id else "")
+    )
 
     # Search for the file
     escaped_name = file_name.replace("'", "\\'")
     query = f"name = '{escaped_name}'"
 
-    list_params = {
+    list_params: Dict[str, Any] = {
         "q": query,
         "pageSize": 10,
         "fields": "files(id, name, mimeType, webViewLink)",
         "supportsAllDrives": True,
         "includeItemsFromAllDrives": True,
     }
+    if drive_id:
+        list_params["corpora"] = "drive"
+        list_params["driveId"] = drive_id
 
     results = await asyncio.to_thread(service.files().list(**list_params).execute)
 

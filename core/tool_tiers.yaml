@@ -38,6 +38,7 @@ drive:
   complete:
     - get_drive_file_permissions
     - check_drive_file_public_access
+    - list_shared_drives
 
 calendar:
   core:
