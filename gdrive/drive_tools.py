@@ -737,7 +737,10 @@ async def _list_shared_drives_impl(
                         "fileId": d["id"],
                         "supportsAllDrives": True,
                         "useDomainAdminAccess": False,
-                        "fields": "permissions(emailAddress, displayName, role, type, domain)",
+                        "fields": (
+                            "nextPageToken, "
+                            "permissions(emailAddress, displayName, role, type, domain)"
+                        ),
                         "pageSize": 100,
                     }
                     if next_permission_page_token:

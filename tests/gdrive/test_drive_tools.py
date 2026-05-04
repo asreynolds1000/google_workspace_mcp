@@ -1213,7 +1213,9 @@ async def test_list_drive_items_shared_drives_can_include_organizers():
     permissions_calls = mock_service.permissions.return_value.list.call_args_list
     assert permissions_calls[0].kwargs["fileId"] == "drive1"
     assert permissions_calls[0].kwargs["supportsAllDrives"] is True
+    assert "nextPageToken" in permissions_calls[0].kwargs["fields"]
     assert "pageToken" not in permissions_calls[0].kwargs
+    assert "nextPageToken" in permissions_calls[1].kwargs["fields"]
     assert permissions_calls[1].kwargs["pageToken"] == "permission_page_2"
     assert "Organizer (user): lead@example.com" in result
     assert "Organizer (user): second-lead@example.com" in result
