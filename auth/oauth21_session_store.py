@@ -412,7 +412,7 @@ class OAuth21SessionStore:
             matching_states = [
                 state
                 for state, state_info in oauth_states.items()
-                if state_info.get("session_id") == session_id
+                if session_id is None or state_info.get("session_id") == session_id
             ]
             if not matching_states:
                 return None, False
