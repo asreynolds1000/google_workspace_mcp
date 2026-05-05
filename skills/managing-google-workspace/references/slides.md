@@ -116,6 +116,8 @@ Create, reply to, or resolve a comment.
 
 **Object IDs**: Every slide and element has a unique `objectId`. Use `get_presentation` to discover slide IDs and `get_page` to discover element IDs within a slide. You can assign custom object IDs when creating elements (useful for referencing them in subsequent requests within the same batch).
 
+**Adding text**: `insertText.objectId` must be a text-capable shape or table object ID, not the slide/page ID. To place new text on a slide, create a text box or shape first with `createShape` and `elementProperties.pageObjectId` set to the slide ID, then call `insertText` using the new shape `objectId`.
+
 **Coordinate system**: Positions and sizes use EMU (English Metric Units). 1 inch = 914400 EMU. Standard slide dimensions are 10 inches wide (9144000 EMU) by 5.625 inches tall (5143500 EMU).
 
 **Batch ordering**: Requests in a batch execute sequentially. Earlier requests can create elements that later requests reference by object ID. If a request fails, subsequent requests in the batch are skipped.

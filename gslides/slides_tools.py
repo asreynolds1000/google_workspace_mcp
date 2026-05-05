@@ -13,10 +13,96 @@ from mcp.types import ToolAnnotations
 
 from auth.service_decorator import require_google_service
 from core.server import server
-from core.utils import handle_http_errors
+from core.utils import UserInputError, handle_http_errors
 from core.comments import create_comment_tools
 
 logger = logging.getLogger(__name__)
+
+
+def _get_request_payload(request: Dict[str, Any], request_type: str) -> Dict[str, Any]:
+    payload = request.get(request_type)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _find_insert_text_targets(
+    requests: List[Dict[str, Any]],
+) -> List[tuple[int, str]]:
+    targets = []
+    for index, request in enumerate(requests):
+        if not isinstance(request, dict):
+            continue
+        object_id = _get_request_payload(request, "insertText").get("objectId")
+        if isinstance(object_id, str) and object_id:
+            targets.append((index, object_id))
+    return targets
+
+
+def _find_created_slide_ids(requests: List[Dict[str, Any]]) -> set[str]:
+    slide_ids = set()
+    for request in requests:
+        if not isinstance(request, dict):
+            continue
+        object_id = _get_request_payload(request, "createSlide").get("objectId")
+        if isinstance(object_id, str) and object_id:
+            slide_ids.add(object_id)
+    return slide_ids
+
+
+async def _get_presentation_slide_ids(service, presentation_id: str) -> set[str]:
+    result = await asyncio.to_thread(
+        service.presentations()
+        .get(
+            presentationId=presentation_id,
+            fields=(
+                "slides(objectId),masters(objectId),"
+                "layouts(objectId),notesMaster(objectId)"
+            ),
+        )
+        .execute
+    )
+    page_ids = {
+        page["objectId"]
+        for page_type in ("slides", "masters", "layouts")
+        for page in result.get(page_type, [])
+        if isinstance(page.get("objectId"), str)
+    }
+    notes_master = result.get("notesMaster")
+    if isinstance(notes_master, dict) and isinstance(notes_master.get("objectId"), str):
+        page_ids.add(notes_master["objectId"])
+    return page_ids
+
+
+async def _validate_insert_text_targets(
+    service, presentation_id: str, requests: List[Dict[str, Any]]
+) -> None:
+    insert_text_targets = _find_insert_text_targets(requests)
+    if not insert_text_targets:
+        return
+
+    slide_ids = _find_created_slide_ids(requests)
+    slide_ids.update(await _get_presentation_slide_ids(service, presentation_id))
+
+    invalid_targets = [
+        (index, object_id)
+        for index, object_id in insert_text_targets
+        if object_id in slide_ids
+    ]
+    if not invalid_targets:
+        return
+
+    invalid_refs = ", ".join(
+        f"requests[{index}].insertText.objectId='{object_id}'"
+        for index, object_id in invalid_targets
+    )
+    raise UserInputError(
+        "Invalid Slides batch update request: "
+        f"{invalid_refs} targets a slide/page object. The Slides API only allows "
+        "insertText on text-capable shapes or table cells. Create a text box or "
+        "shape first with createShape, set elementProperties.pageObjectId to the "
+        "slide ID, then insertText into the new shape objectId. For existing "
+        "content, call get_page and use a Shape or Table element ID, not the "
+        "Page ID."
+    )
 
 
 @server.tool(
@@ -185,6 +271,13 @@ async def batch_update_presentation(
     """
     Apply batch updates to a Google Slides presentation.
 
+    Important:
+        insertText.objectId must be a text-capable shape or table object ID,
+        not a slide/page object ID. To add text to a slide, create a text box
+        or shape first with createShape, set elementProperties.pageObjectId to
+        the slide ID, and then insertText into that shape objectId. To edit
+        existing text, call get_page and use a Shape or Table element ID.
+
     Args:
         user_google_email (str): The user's Google email address. Required.
         presentation_id (str): The ID of the presentation to update.
@@ -196,6 +289,8 @@ async def batch_update_presentation(
     logger.info(
         f"[batch_update_presentation] Invoked. Email: '{user_google_email}', ID: '{presentation_id}', Requests: {len(requests)}"
     )
+
+    await _validate_insert_text_targets(service, presentation_id, requests)
 
     body = {"requests": requests}
 
