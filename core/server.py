@@ -486,6 +486,7 @@ def configure_server_for_http():
                     redirect_path=config.redirect_path,
                     required_scopes=provider_valid_scopes,
                     resource_server_url=config.get_oauth_base_url(),
+                    jwt_signing_key=jwt_signing_key,
                 )
                 server.auth = provider
 
