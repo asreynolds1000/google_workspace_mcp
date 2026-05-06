@@ -586,6 +586,7 @@ async def handle_auth_callback(
     redirect_uri: str,
     credentials_base_dir: str = DEFAULT_CREDENTIALS_DIR,
     session_id: Optional[str] = None,
+    *,
     allow_missing_state_fallback: bool = False,
     client_secrets_path: Optional[
         str
