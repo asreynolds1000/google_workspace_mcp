@@ -427,7 +427,7 @@ export GOOGLE_PSE_ENGINE_ID=\
 
 > **📌 Transport Mode Guidance**: Use **streamable HTTP mode** (`--transport streamable-http`) for all modern MCP clients including Claude Code, VS Code MCP, and MCP Inspector. For Claude Desktop, run an instance and connect via a [Connector](https://workspacemcp.com/quick-start). Stdio mode is a legacy fallback. For deployments, prefer OAuth 2.1 with stateless mode (`MCP_ENABLE_OAUTH21=true`, `WORKSPACE_MCP_STATELESS_MODE=true`) unless you need local attachment or credential storage.
 
-> **OAuth state safety**: Legacy stdio starts a local-only OAuth callback server and may recover a missing Google `state` parameter by consuming the most recent pending local OAuth state. This fallback is intentionally limited to stdio because it can cross session boundaries. Do not enable or emulate this behavior in streamable HTTP, hosted, or multi-user deployments; those modes must require an explicit state match.
+> **OAuth state safety**: Legacy stdio starts a local-only OAuth callback server. In single-user mode only, it may recover a missing Google `state` parameter by consuming the most recent pending local OAuth state. This fallback is intentionally disabled outside single-user mode because it can cross session boundaries. Do not enable or emulate this behavior in streamable HTTP, hosted, or multi-user deployments; those modes must require an explicit state match.
 
 <details open>
 <summary>▶ <b>Launch Commands</b> <sub><sup>← Choose your startup mode</sup></sub></summary>
@@ -978,7 +978,7 @@ See the **[Quick Start Guide](https://workspacemcp.com/quick-start)** for setup 
 
 > **⚠️ Note**: Stdio mode is a legacy fallback for clients that don't support Connectors. Prefer the Connector-based approach above.
 >
-> **OAuth callback caveat**: The legacy stdio callback path includes a local recovery fallback for rare Google redirects that omit the `state` parameter. That recovery can only be safe in a single-user local process; in HTTP or hosted multi-user scenarios it could consume another user's pending OAuth state. There is no environment variable to enable this globally.
+> **OAuth callback caveat**: The legacy stdio callback path includes a local recovery fallback for rare Google redirects that omit the `state` parameter, but only when `--single-user` is active. That recovery can only be safe in a single-user local process; in HTTP or hosted multi-user scenarios it could consume another user's pending OAuth state. There is no environment variable to enable this globally.
 
 1. Open Claude Desktop Settings → Developer → Edit Config
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`

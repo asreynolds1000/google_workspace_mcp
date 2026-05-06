@@ -71,6 +71,7 @@ def _make_credentials(refresh_token):
 async def test_callback_missing_state_does_not_use_latest_state_by_default(
     monkeypatch,
 ):
+    monkeypatch.delenv("MCP_SINGLE_USER_MODE", raising=False)
     oauth_store = _DummyOAuthStore(session_credentials=None)
 
     monkeypatch.setattr(
@@ -89,7 +90,33 @@ async def test_callback_missing_state_does_not_use_latest_state_by_default(
 
 
 @pytest.mark.asyncio
-async def test_callback_missing_state_uses_explicit_stdio_fallback(monkeypatch):
+async def test_callback_missing_state_rejects_explicit_fallback_outside_single_user(
+    monkeypatch,
+):
+    monkeypatch.delenv("MCP_SINGLE_USER_MODE", raising=False)
+    oauth_store = _DummyOAuthStore(session_credentials=None)
+
+    monkeypatch.setattr(
+        "auth.google_auth.get_oauth21_session_store", lambda: oauth_store
+    )
+
+    with pytest.raises(ValueError, match="Missing OAuth state parameter"):
+        await handle_auth_callback(
+            scopes=["scope.a"],
+            authorization_response="http://localhost/callback?code=code123",
+            redirect_uri="http://localhost/callback",
+            session_id=None,
+            allow_missing_state_fallback=True,
+        )
+
+    assert oauth_store.latest_calls == []
+
+
+@pytest.mark.asyncio
+async def test_callback_missing_state_uses_explicit_single_user_stdio_fallback(
+    monkeypatch,
+):
+    monkeypatch.setenv("MCP_SINGLE_USER_MODE", "1")
     callback_credentials = _make_credentials(refresh_token="callback-refresh-token")
     oauth_store = _DummyOAuthStore(
         session_credentials=None,

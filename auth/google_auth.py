@@ -644,16 +644,20 @@ async def handle_auth_callback(
             state_info = store.validate_and_consume_oauth_state(
                 state, session_id=session_id
             )
-        elif allow_missing_state_fallback:
+        elif (
+            allow_missing_state_fallback
+            and os.getenv("MCP_SINGLE_USER_MODE") == "1"
+            and session_id is None
+        ):
             # stdio mode fallback: state may be absent from Google's redirect
             # (e.g. when prompt=select_account is used with revoked credentials).
             # Use the most recently stored state to recover the PKCE code_verifier.
             logger.warning(
-                "OAuth callback missing state parameter; using most recent stored state (stdio fallback)"
+                "OAuth callback missing state parameter; using most recent stored state (single-user stdio fallback)"
             )
             state_info = store.consume_latest_oauth_state(
                 initiating_session_id=session_id,
-                allow_any_session=session_id is None,
+                allow_any_session=True,
             )
             if not state_info:
                 raise ValueError(
