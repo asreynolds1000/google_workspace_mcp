@@ -9,6 +9,11 @@ from typing import Any, Dict, List, Set, Tuple
 
 from core.utils import UserInputError
 
+_PRESENTATION_PAGE_ID_FIELDS = (
+    "slides(objectId,slideProperties(notesPage(objectId))),"
+    "masters(objectId),layouts(objectId),notesMaster(objectId)"
+)
+
 _SLIDES_BATCH_REQUEST_TYPES = frozenset(
     {
         "createSlide",
@@ -148,10 +153,7 @@ async def _get_presentation_slide_ids(service, presentation_id: str) -> Set[str]
         service.presentations()
         .get(
             presentationId=presentation_id,
-            fields=(
-                "slides(objectId,notesPage(objectId)),masters(objectId),"
-                "layouts(objectId),notesMaster(objectId)"
-            ),
+            fields=_PRESENTATION_PAGE_ID_FIELDS,
         )
         .execute
     )
@@ -162,7 +164,7 @@ async def _get_presentation_slide_ids(service, presentation_id: str) -> Set[str]
         if isinstance(page.get("objectId"), str)
     }
     for slide in result.get("slides", []):
-        notes_id = slide.get("notesPage", {}).get("objectId")
+        notes_id = slide.get("slideProperties", {}).get("notesPage", {}).get("objectId")
         if isinstance(notes_id, str):
             page_ids.add(notes_id)
     notes_master = result.get("notesMaster")

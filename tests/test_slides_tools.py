@@ -88,7 +88,12 @@ async def test_batch_update_rejects_insert_text_targeting_slide_id():
 async def test_batch_update_rejects_insert_text_targeting_other_page_ids():
     service, presentations = _build_slides_service(
         presentation={
-            "slides": [{"objectId": "slide_1"}],
+            "slides": [
+                {
+                    "objectId": "slide_1",
+                    "slideProperties": {"notesPage": {"objectId": "notes_1"}},
+                }
+            ],
             "masters": [{"objectId": "master_1"}],
             "layouts": [{"objectId": "layout_1"}],
             "notesMaster": {"objectId": "notes_master_1"},
@@ -122,6 +127,13 @@ async def test_batch_update_rejects_insert_text_targeting_other_page_ids():
                         "text": "Title",
                     }
                 },
+                {
+                    "insertText": {
+                        "objectId": "notes_1",
+                        "insertionIndex": 0,
+                        "text": "Title",
+                    }
+                },
             ],
         )
 
@@ -129,10 +141,11 @@ async def test_batch_update_rejects_insert_text_targeting_other_page_ids():
     assert "requests[0].insertText.objectId='master_1'" in message
     assert "requests[1].insertText.objectId='layout_1'" in message
     assert "requests[2].insertText.objectId='notes_master_1'" in message
+    assert "requests[3].insertText.objectId='notes_1'" in message
     presentations.get.assert_called_once_with(
         presentationId="presentation-1",
         fields=(
-            "slides(objectId,notesPage(objectId)),masters(objectId),layouts(objectId),notesMaster(objectId)"
+            "slides(objectId,slideProperties(notesPage(objectId))),masters(objectId),layouts(objectId),notesMaster(objectId)"
         ),
     )
     presentations.batchUpdate.assert_not_called()
