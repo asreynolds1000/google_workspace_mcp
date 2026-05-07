@@ -132,7 +132,7 @@ async def test_batch_update_rejects_insert_text_targeting_other_page_ids():
     presentations.get.assert_called_once_with(
         presentationId="presentation-1",
         fields=(
-            "slides(objectId),masters(objectId),layouts(objectId),notesMaster(objectId)"
+            "slides(objectId,notesPage(objectId)),masters(objectId),layouts(objectId),notesMaster(objectId)"
         ),
     )
     presentations.batchUpdate.assert_not_called()
