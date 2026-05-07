@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import os
 import sys
-import warnings
 
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -67,7 +67,7 @@ class TestCoerceNicknameInput:
         assert _coerce_nickname_input(original) is original
 
     def test_dict_rejects_extra_fields(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             _coerce_nickname_input({"value": "Bob", "unknown_field": "x"})
 
 
@@ -100,9 +100,9 @@ class TestCoerceUserDefinedInput:
         assert _coerce_user_defined_input(original) is original
 
     def test_requires_both_key_and_value(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             _coerce_user_defined_input({"key": "Only Key"})
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             _coerce_user_defined_input({"value": "Only Value"})
 
 
@@ -142,7 +142,10 @@ class TestNormalizeUrl:
         assert _normalize_url("https://example.com/path") == "https://example.com/path"
 
     def test_only_trailing_slash_stripped_not_internal(self):
-        assert _normalize_url("https://example.com/path/sub") == "https://example.com/path/sub"
+        assert (
+            _normalize_url("https://example.com/path/sub")
+            == "https://example.com/path/sub"
+        )
 
 
 class TestNormalizeNickname:
@@ -608,7 +611,9 @@ class TestNotesClearBugFix:
 
     def test_notes_text_sets_bio(self):
         body = _build_person_body(notes="Important contact")
-        assert body["biographies"] == [{"value": "Important contact", "contentType": "TEXT_PLAIN"}]
+        assert body["biographies"] == [
+            {"value": "Important contact", "contentType": "TEXT_PLAIN"}
+        ]
 
     def test_notes_empty_string_clears_bio(self):
         """notes='' is the explicit signal to clear — must produce biographies=[]."""

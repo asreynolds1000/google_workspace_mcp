@@ -21,9 +21,7 @@ from core.utils import UserInputError, handle_http_errors, StringList
 logger = logging.getLogger(__name__)
 
 # Default person fields for list/search operations
-DEFAULT_PERSON_FIELDS = (
-    "names,nicknames,emailAddresses,phoneNumbers,organizations"
-)
+DEFAULT_PERSON_FIELDS = "names,nicknames,emailAddresses,phoneNumbers,organizations"
 
 # Detailed person fields for get operations
 DETAILED_PERSON_FIELDS = (
@@ -437,9 +435,7 @@ def _format_contact(person: Dict[str, Any], detailed: bool = False) -> str:
         # User-defined custom fields
         user_defined = person.get("userDefined", [])
         if user_defined:
-            valid_ud = [
-                ud for ud in user_defined if ud.get("key") and ud.get("value")
-            ]
+            valid_ud = [ud for ud in user_defined if ud.get("key") and ud.get("value")]
             if valid_ud:
                 lines.append("Custom Fields:")
                 for ud in valid_ud:
@@ -919,9 +915,7 @@ def _merge_user_defined(
             if _normalize_user_defined_key(ud.get("key", "")) not in remove_keys
         ]
     # merge: new value overrides existing for matching key; new keys appended
-    new_by_key = {
-        _normalize_user_defined_key(ud.get("key", "")): ud for ud in new_ud
-    }
+    new_by_key = {_normalize_user_defined_key(ud.get("key", "")): ud for ud in new_ud}
     result = []
     seen_keys = set()
     for ud in existing:
