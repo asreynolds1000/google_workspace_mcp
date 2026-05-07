@@ -137,7 +137,7 @@ def test_get_service_account_credentials_raises_without_key_source(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_service_account_uses_runtime_configured_user(monkeypatch):
+async def test_authenticate_service_account_uses_caller_email(monkeypatch):
     monkeypatch.setattr(service_decorator, "_ENV_USER_EMAIL", None)
     monkeypatch.setenv("USER_GOOGLE_EMAIL", "configured@example.com")
     monkeypatch.setattr(service_decorator, "is_service_account_enabled", lambda: True)
@@ -176,10 +176,10 @@ async def test_authenticate_service_account_uses_runtime_configured_user(monkeyp
     )
 
     assert service is fake_service
-    assert actual_user == "configured@example.com"
+    assert actual_user == "caller@example.com"
     assert captured == {
         "scopes": ["scope-a"],
-        "subject": "configured@example.com",
+        "subject": "caller@example.com",
         "service_name": "gmail",
         "service_version": "v1",
         "credentials": fake_credentials,
@@ -204,6 +204,126 @@ async def test_authenticate_service_account_raises_without_configured_user(
             service_version="v1",
             tool_name="sample_tool",
             user_google_email="caller@example.com",
+            resolved_scopes=["scope-a"],
+            mcp_session_id=None,
+            authenticated_user=None,
+        )
+
+
+# --- DWD per-request impersonation tests ---
+
+
+def _patch_service_account(monkeypatch, *, allowed_domains=""):
+    """Common monkeypatching for DWD impersonation tests."""
+    monkeypatch.setattr(service_decorator, "_ENV_USER_EMAIL", None)
+    monkeypatch.setenv("USER_GOOGLE_EMAIL", "canonical@corp.com")
+    monkeypatch.setattr(service_decorator, "is_service_account_enabled", lambda: True)
+
+    config = SimpleNamespace(
+        service_account_key_file="/fake/key.json",
+        service_account_key_json=None,
+        dwd_allowed_domains=(
+            [d.strip().lower() for d in allowed_domains.split(",") if d.strip()]
+            if allowed_domains
+            else []
+        ),
+    )
+    monkeypatch.setattr(service_decorator, "get_oauth_config", lambda: config)
+
+    captured = {}
+    fake_service = object()
+    fake_credentials = object()
+
+    def fake_get_creds(scopes, subject):
+        captured["subject"] = subject
+        return fake_credentials
+
+    def fake_build(service_name, service_version, credentials):
+        return fake_service
+
+    monkeypatch.setattr(
+        service_decorator,
+        "_get_service_account_credentials",
+        fake_get_creds,
+    )
+    monkeypatch.setattr(service_decorator, "build", fake_build)
+    return captured, fake_service
+
+
+@pytest.mark.asyncio
+async def test_dwd_request_impersonation_uses_caller_email(monkeypatch):
+    captured, fake_service = _patch_service_account(monkeypatch)
+
+    service, actual_user = await service_decorator._authenticate_service(
+        use_oauth21=False,
+        service_name="gmail",
+        service_version="v1",
+        tool_name="t",
+        user_google_email="other@corp.com",
+        resolved_scopes=["scope-a"],
+        mcp_session_id=None,
+        authenticated_user=None,
+    )
+
+    assert service is fake_service
+    assert actual_user == "other@corp.com"
+    assert captured["subject"] == "other@corp.com"
+
+
+@pytest.mark.asyncio
+async def test_dwd_request_impersonation_falls_back_to_canonical(monkeypatch):
+    captured, fake_service = _patch_service_account(monkeypatch)
+
+    service, actual_user = await service_decorator._authenticate_service(
+        use_oauth21=False,
+        service_name="gmail",
+        service_version="v1",
+        tool_name="t",
+        user_google_email="",
+        resolved_scopes=["scope-a"],
+        mcp_session_id=None,
+        authenticated_user=None,
+    )
+
+    assert actual_user == "canonical@corp.com"
+    assert captured["subject"] == "canonical@corp.com"
+
+
+@pytest.mark.asyncio
+async def test_dwd_request_impersonation_domain_allowlist_passes(monkeypatch):
+    captured, _ = _patch_service_account(
+        monkeypatch, allowed_domains="corp.com,partner.io"
+    )
+
+    _, actual_user = await service_decorator._authenticate_service(
+        use_oauth21=False,
+        service_name="gmail",
+        service_version="v1",
+        tool_name="t",
+        user_google_email="alice@partner.io",
+        resolved_scopes=["scope-a"],
+        mcp_session_id=None,
+        authenticated_user=None,
+    )
+
+    assert actual_user == "alice@partner.io"
+    assert captured["subject"] == "alice@partner.io"
+
+
+@pytest.mark.asyncio
+async def test_dwd_request_impersonation_domain_allowlist_rejects(monkeypatch):
+    _patch_service_account(monkeypatch, allowed_domains="corp.com")
+
+    with pytest.raises(
+        service_decorator.GoogleAuthenticationError,
+        match="not in DWD_ALLOWED_DOMAINS",
+    ):
+        await service_decorator._authenticate_service(
+            use_oauth21=False,
+            service_name="gmail",
+            service_version="v1",
+            tool_name="t",
+            user_google_email="evil@external.com",
             resolved_scopes=["scope-a"],
             mcp_session_id=None,
             authenticated_user=None,

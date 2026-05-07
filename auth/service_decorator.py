@@ -62,6 +62,8 @@ from auth.scopes import (
     SCRIPT_PROJECTS_READONLY_SCOPE,
     SCRIPT_DEPLOYMENTS_SCOPE,
     SCRIPT_DEPLOYMENTS_READONLY_SCOPE,
+    SCRIPT_EXTERNAL_REQUEST_SCOPE,
+    SCRIPT_SCRIPTAPP_SCOPE,
     has_required_scopes,
 )
 
@@ -252,6 +254,18 @@ def _get_service_account_credentials(
         ) from e
 
 
+def _validate_dwd_domain(email: str, config) -> None:
+    """Raise if email's domain is not in the configured allowlist (when set)."""
+    if not config.dwd_allowed_domains:
+        return
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain not in config.dwd_allowed_domains:
+        raise GoogleAuthenticationError(
+            f"Domain '{domain}' is not in DWD_ALLOWED_DOMAINS. "
+            f"Allowed: {', '.join(config.dwd_allowed_domains)}"
+        )
+
+
 async def _authenticate_service(
     use_oauth21: bool,
     service_name: str,
@@ -274,19 +288,21 @@ async def _authenticate_service(
             raise GoogleAuthenticationError(
                 "Service account mode requires USER_GOOGLE_EMAIL to be configured."
             )
-        if user_google_email != canonical_email:
-            logger.warning(
-                f"[{tool_name}] Service account: ignoring caller-supplied email "
-                f"'{user_google_email}', using configured USER_GOOGLE_EMAIL "
-                f"'{canonical_email}'"
-            )
-        credentials = _get_service_account_credentials(resolved_scopes, canonical_email)
+
+        config = get_oauth_config()
+        if user_google_email:
+            _validate_dwd_domain(user_google_email, config)
+            target_email = user_google_email
+        else:
+            target_email = canonical_email
+
+        credentials = _get_service_account_credentials(resolved_scopes, target_email)
         service = build(service_name, service_version, credentials=credentials)
         logger.info(
             f"[{tool_name}] Authenticated {service_name} for "
-            f"{canonical_email} via service-account"
+            f"{target_email} via service-account"
         )
-        return service, canonical_email
+        return service, target_email
 
     if use_oauth21:
         logger.debug(f"[{tool_name}] Using OAuth 2.1 flow")
@@ -563,6 +579,8 @@ SCOPE_GROUPS = {
     "script_projects": SCRIPT_PROJECTS_SCOPE,
     "script_deployments": SCRIPT_DEPLOYMENTS_SCOPE,
     "script_deployments_readonly": SCRIPT_DEPLOYMENTS_READONLY_SCOPE,
+    "script_run": SCRIPT_EXTERNAL_REQUEST_SCOPE,
+    "script_scriptapp": SCRIPT_SCRIPTAPP_SCOPE,
 }
 
 

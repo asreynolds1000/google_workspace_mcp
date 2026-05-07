@@ -5,7 +5,7 @@ MCP tools for reading, writing, formatting, and managing Google Sheets. All tool
 ## Contents
 - Search & Info: list_spreadsheets, get_spreadsheet_info
 - Read & Write: read_sheet_values, modify_sheet_values
-- Create: create_spreadsheet, create_sheet
+- Create: create_spreadsheet, create_sheet, move_sheet_rows
 - Formatting: format_sheet_range, manage_conditional_formatting
 - Comments: list_spreadsheet_comments, manage_spreadsheet_comment
 - Tips
@@ -78,6 +78,18 @@ Add a new sheet (tab) to an existing spreadsheet.
 | user_google_email | string | yes | | |
 | spreadsheet_id | string | yes | | |
 | sheet_name | string | yes | | |
+
+### move_sheet_rows
+Move rows from one sheet to another within the same spreadsheet. Preserves formulas, data types, and formatting.
+
+| Parameter | Type | Required | Default | Notes |
+|-----------|------|----------|---------|-------|
+| user_google_email | string | yes | | |
+| spreadsheet_id | string | yes | | |
+| source_sheet | string | yes | | Name of the sheet to move rows from |
+| start_row | integer | yes | | First row to move (1-based, inclusive) |
+| end_row | integer | yes | | Last row to move (1-based, inclusive) |
+| destination_sheet | string | yes | | Name of the sheet to move rows to |
 
 ---
 

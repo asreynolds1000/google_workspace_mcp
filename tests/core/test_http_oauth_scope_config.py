@@ -5,7 +5,7 @@ import pytest
 import core.server as server_module
 
 
-def test_configure_server_for_http_uses_base_required_scopes(monkeypatch):
+def test_configure_server_for_http_uses_protocol_auth_required_scopes(monkeypatch):
     captured = {}
 
     class FakeGoogleProvider:
@@ -15,6 +15,9 @@ def test_configure_server_for_http_uses_base_required_scopes(monkeypatch):
                 valid_scopes=kwargs.get("valid_scopes"),
                 default_scopes=None,
             )
+            default_scope = " ".join(kwargs.get("required_scopes", []))
+            self._default_scope_str = default_scope
+            self._cimd_manager = SimpleNamespace(default_scope=default_scope)
 
     monkeypatch.setattr(server_module, "get_transport_mode", lambda: "streamable-http")
     monkeypatch.setattr(server_module, "GoogleProvider", FakeGoogleProvider)
@@ -50,11 +53,16 @@ def test_configure_server_for_http_uses_base_required_scopes(monkeypatch):
 
     server_module.configure_server_for_http()
 
-    assert captured["required_scopes"] == sorted(server_module.BASE_SCOPES)
+    assert captured["required_scopes"] == sorted(server_module.PROTOCOL_AUTH_SCOPES)
     assert captured["valid_scopes"] == sorted(server_module.get_current_scopes())
     assert (
         server_module.server.auth.client_registration_options.default_scopes
         == sorted(server_module.get_current_scopes())
+    )
+    expected_default_scope = " ".join(sorted(server_module.get_current_scopes()))
+    assert server_module.server.auth._default_scope_str == expected_default_scope
+    assert (
+        server_module.server.auth._cimd_manager.default_scope == expected_default_scope
     )
 
 

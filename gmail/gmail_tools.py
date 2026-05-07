@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Annotated, Optional, List, Dict, Literal, Any
 from urllib.parse import unquote, urlparse, urlunsplit
 
-import httpx
 from email.message import EmailMessage
 from email.policy import SMTP
 from email.utils import formataddr
+
+import httpx
+from mcp.types import ToolAnnotations
 
 from pydantic import Field
 from googleapiclient.errors import HttpError
@@ -33,6 +35,7 @@ from core.config import (
 )
 from core.http_utils import ssrf_safe_stream
 from core.utils import (
+    GOOGLE_API_WRITE_RETRIES,
     handle_http_errors,
     validate_file_path,
     UserInputError,
@@ -47,27 +50,19 @@ from auth.scopes import (
     GMAIL_MODIFY_SCOPE,
     GMAIL_LABELS_SCOPE,
 )
+from gmail.gmail_helpers import (
+    GMAIL_METADATA_HEADERS,
+    RAW_BODY_TRUNCATE_LIMIT,
+    _analyze_thread_ownership_impl,
+    _is_benign_signature_http_error,
+    _signature_fetch_tool_error,
+)
 
 logger = logging.getLogger(__name__)
 
 GMAIL_BATCH_SIZE = 25
 GMAIL_REQUEST_DELAY = 0.1
 HTML_BODY_TRUNCATE_LIMIT = 20000
-RAW_BODY_TRUNCATE_LIMIT = 20000
-
-GMAIL_METADATA_HEADERS = [
-    "Subject",
-    "From",
-    "To",
-    "Cc",
-    "Message-ID",
-    "In-Reply-To",
-    "References",
-    "Date",
-    "List-Unsubscribe",
-    "Precedence",
-    "List-Id",
-]
 LOW_VALUE_TEXT_PLACEHOLDERS = (
     "your client does not support html",
     "view this email in your browser",
@@ -502,25 +497,24 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
     """
     Fetch signature HTML from Gmail send-as settings.
 
-    Returns empty string when the account has no signature configured or the
-    OAuth token cannot access settings endpoints.
+    Returns empty string when the account has no signature configured or when
+    auth/scope errors mean the settings endpoint is unavailable.
     """
     try:
         response = await asyncio.to_thread(
             service.users().settings().sendAs().list(userId="me").execute
         )
     except HttpError as e:
-        status = getattr(getattr(e, "resp", None), "status", None)
-        if status in {401, 403}:
+        if _is_benign_signature_http_error(e):
             logger.info(
                 "Skipping Gmail signature fetch: missing auth/scope for settings endpoint."
             )
             return ""
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
     except Exception as e:
-        logger.warning(f"Failed to fetch Gmail send-as signatures: {e}")
-        return ""
+        logger.error(f"Failed to fetch Gmail send-as signatures: {e}", exc_info=True)
+        raise _signature_fetch_tool_error(e) from e
 
     send_as_entries = response.get("sendAs", [])
     if not send_as_entries:
@@ -537,6 +531,13 @@ async def _get_send_as_signature_html(service, from_email: Optional[str] = None)
             return entry.get("signature", "") or ""
 
     return send_as_entries[0].get("signature", "") or ""
+
+
+async def _get_send_as_signature_html_for_tool(
+    service, from_email: Optional[str] = None
+) -> str:
+    """Fetch signature HTML and convert non-benign failures to tool errors."""
+    return await _get_send_as_signature_html(service, from_email=from_email)
 
 
 def _format_attachment_result(attached_count: int, requested_count: int) -> str:
@@ -1257,7 +1258,15 @@ def _format_gmail_results_plain(
     return "\n".join(lines)
 
 
-@server.tool()
+@server.tool(
+    title="Search Gmail Messages",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("search_gmail_messages", is_read_only=True, service_type="gmail")
 @require_google_service("gmail", "gmail_read")
 async def search_gmail_messages(
@@ -1321,7 +1330,15 @@ async def search_gmail_messages(
     return formatted_output
 
 
-@server.tool()
+@server.tool(
+    title="Get Gmail Message Content",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_gmail_message_content", is_read_only=True, service_type="gmail"
 )
@@ -1434,7 +1451,15 @@ async def get_gmail_message_content(
     return "\n".join(content_lines)
 
 
-@server.tool()
+@server.tool(
+    title="Get Gmail Messages Content Batch",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_gmail_messages_content_batch", is_read_only=True, service_type="gmail"
 )
@@ -1614,7 +1639,15 @@ async def get_gmail_messages_content_batch(
     return final_output
 
 
-@server.tool()
+@server.tool(
+    title="Get Gmail Attachment Content",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_gmail_attachment_content", is_read_only=True, service_type="gmail"
 )
@@ -1812,7 +1845,15 @@ async def get_gmail_attachment_content(
         return "\n".join(result_lines)
 
 
-@server.tool()
+@server.tool(
+    title="Send Gmail Message",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("send_gmail_message", service_type="gmail")
 @require_google_service("gmail", GMAIL_SEND_SCOPE)
 async def send_gmail_message(
@@ -1869,6 +1910,12 @@ async def send_gmail_message(
             description='Optional list of attachments. Each can have: "url" (fetch from URL — works with MCP attachment URLs from get_drive_file_download_url / get_gmail_attachment_content), OR "path" (file path, auto-encodes), OR "content" (standard base64, not urlsafe) + "filename". Optional "mime_type". Example: [{"url": "https://host/attachments/abc-123", "filename": "report.pdf"}]',
         ),
     ] = None,
+    include_signature: Annotated[
+        bool,
+        Field(
+            description="Whether to append the Gmail signature from Settings > Signature when available. Defaults to true.",
+        ),
+    ] = True,
 ) -> str:
     """
     Sends an email using the user's Gmail account. Supports both new emails and replies with optional attachments.
@@ -1898,6 +1945,11 @@ async def send_gmail_message(
         thread_id (Optional[str]): Optional Gmail thread ID to reply within. When provided, sends a reply.
         in_reply_to (Optional[str]): Optional RFC Message-ID of the message being replied to (e.g., '<message123@gmail.com>').
         references (Optional[str]): Optional chain of RFC Message-IDs for proper threading (e.g., '<msg1@gmail.com> <msg2@gmail.com>').
+        include_signature (bool): Whether to append Gmail signature HTML from send-as settings.
+            When include_signature is true and Gmail signature retrieval fails for benign reasons
+            (e.g., missing gmail.settings.basic scope), the send proceeds without a signature.
+            Non-benign failures such as quota/rate-limit or API errors raise ToolError and abort
+            the send.
 
     Returns:
         str: Confirmation message with the sent email's message ID.
@@ -1973,11 +2025,23 @@ async def send_gmail_message(
     # Prepare the email message
     # Use from_email (Send As alias) if provided, otherwise default to authenticated user
     sender_email = from_email or user_google_email
+
+    # Optionally append the Gmail signature from send-as settings, mirroring
+    # draft_gmail_message so sent mail respects the user's Settings > Signature.
+    send_body_content = body
+    if include_signature:
+        signature_html = await _get_send_as_signature_html_for_tool(
+            service, from_email=sender_email
+        )
+        send_body_content = _append_signature_to_body(
+            send_body_content, body_format, signature_html
+        )
+
     resolved_attachments = await _resolve_url_attachments(attachments)
     raw_message, thread_id_final, attached_count, attachment_errors = (
         _prepare_gmail_message(
             subject=subject,
-            body=body,
+            body=send_body_content,
             to=to,
             cc=cc,
             bcc=bcc,
@@ -2009,7 +2073,8 @@ async def send_gmail_message(
 
     # Send the message
     sent_message = await asyncio.to_thread(
-        service.users().messages().send(userId="me", body=send_body).execute
+        service.users().messages().send(userId="me", body=send_body).execute,
+        num_retries=GOOGLE_API_WRITE_RETRIES,
     )
     message_id = sent_message.get("id")
 
@@ -2021,7 +2086,15 @@ async def send_gmail_message(
     return f"Email sent! Message ID: {message_id}"
 
 
-@server.tool()
+@server.tool(
+    title="Draft Gmail Message",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("draft_gmail_message", service_type="gmail")
 @require_google_service("gmail", GMAIL_COMPOSE_SCOPE)
 async def draft_gmail_message(
@@ -2125,7 +2198,10 @@ async def draft_gmail_message(
               - 'filename' (required): Name of the file
               - 'mime_type' (optional): MIME type (defaults to 'application/octet-stream')
         include_signature (bool): Whether to append Gmail signature HTML from send-as settings.
-            If unavailable (e.g., missing gmail.settings.basic scope), the draft is still created without signature.
+            When include_signature is true and Gmail signature retrieval fails for benign reasons
+            (e.g., missing gmail.settings.basic scope), the draft proceeds without a signature.
+            Non-benign failures such as quota/rate-limit or API errors raise ToolError and abort
+            the draft.
         quote_original (bool): Whether to include the original message as a quoted reply.
             Requires thread_id to be provided. When enabled, fetches the original message
             and appends it below the signature. Defaults to False.
@@ -2195,7 +2271,7 @@ async def draft_gmail_message(
     draft_body = body
     signature_html = ""
     if include_signature:
-        signature_html = await _get_send_as_signature_html(
+        signature_html = await _get_send_as_signature_html_for_tool(
             service, from_email=sender_email
         )
 
@@ -2274,7 +2350,8 @@ async def draft_gmail_message(
 
     # Create the draft
     created_draft = await asyncio.to_thread(
-        service.users().drafts().create(userId="me", body=draft_body).execute
+        service.users().drafts().create(userId="me", body=draft_body).execute,
+        num_retries=GOOGLE_API_WRITE_RETRIES,
     )
     draft_id = created_draft.get("id")
     attachment_info = _format_attachment_result(
@@ -2401,7 +2478,15 @@ def _format_thread_content(
     return "\n".join(content_lines)
 
 
-@server.tool()
+@server.tool(
+    title="Get Gmail Thread Content",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("gmail", "gmail_read")
 @handle_http_errors("get_gmail_thread_content", is_read_only=True, service_type="gmail")
 async def get_gmail_thread_content(
@@ -2419,9 +2504,25 @@ async def get_gmail_thread_content(
             ),
         ),
     ] = "text",
-) -> str:
+    include_analysis: Annotated[
+        bool,
+        Field(
+            description=(
+                "When True, the return value is a dict with both the formatted "
+                "thread content AND structured ownership analysis (last sender, "
+                "ball-in-court verdict, per-sender message counts, participants). "
+                "Defaults to False, in which case the existing string return shape "
+                "is preserved."
+            ),
+        ),
+    ] = False,
+) -> "str | Dict[str, Any]":
     """
     Retrieves the complete content of a Gmail conversation thread, including all messages.
+
+    Optionally also returns structured ownership analysis so a caller can
+    determine who sent the last message and who owes whom a response without
+    re-parsing the formatted string or making a second tool call.
 
     Args:
         thread_id (str): The unique ID of the Gmail thread to retrieve.
@@ -2430,12 +2531,22 @@ async def get_gmail_thread_content(
             "text" (default) returns plaintext (HTML converted to text as fallback).
             "html" returns the raw HTML body as-is without conversion.
             "raw" fetches each message's full raw MIME content and returns the base64url-decoded body.
+        include_analysis (bool): When True, returns a dict containing both the
+            formatted thread content and structured ownership analysis. When
+            False (default), returns the formatted content string (existing
+            behavior, unchanged).
 
     Returns:
-        str: The complete thread content with all messages formatted for reading.
+        str: When `include_analysis=False` (default). The complete thread
+        content with all messages formatted for reading.
+
+        Dict[str, Any]: When `include_analysis=True`. A dict with keys
+            "content" (str) and "analysis" (dict). See
+            `_analyze_thread_ownership_impl` for the analysis schema.
     """
     logger.info(
-        f"[get_gmail_thread_content] Invoked. Thread ID: '{thread_id}', Email: '{user_google_email}'"
+        f"[get_gmail_thread_content] Invoked. Thread ID: '{thread_id}', "
+        f"Email: '{user_google_email}', include_analysis={include_analysis}"
     )
 
     # Fetch the complete thread with all messages
@@ -2454,15 +2565,29 @@ async def get_gmail_thread_content(
             service, message_ids, log_prefix="get_gmail_thread_content"
         )
 
-    return _format_thread_content(
+    content = _format_thread_content(
         thread_response,
         thread_id,
         body_format=body_format,
         raw_contents=raw_contents,
     )
 
+    if not include_analysis:
+        return content
 
-@server.tool()
+    analysis = _analyze_thread_ownership_impl(thread_response, user_google_email)
+    return {"content": content, "analysis": analysis}
+
+
+@server.tool(
+    title="Get Gmail Threads Content Batch",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @require_google_service("gmail", "gmail_read")
 @handle_http_errors(
     "get_gmail_threads_content_batch", is_read_only=True, service_type="gmail"
@@ -2606,7 +2731,15 @@ async def get_gmail_threads_content_batch(
     return header + "\n\n" + "\n---\n\n".join(output_threads)
 
 
-@server.tool()
+@server.tool(
+    title="List Gmail Labels",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("list_gmail_labels", is_read_only=True, service_type="gmail")
 @require_google_service("gmail", "gmail_read")
 async def list_gmail_labels(service, user_google_email: str) -> str:
@@ -2654,7 +2787,15 @@ async def list_gmail_labels(service, user_google_email: str) -> str:
     return "\n".join(lines)
 
 
-@server.tool()
+@server.tool(
+    title="Manage Gmail Label",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("manage_gmail_label", service_type="gmail")
 @require_google_service("gmail", GMAIL_LABELS_SCOPE)
 async def manage_gmail_label(
@@ -2733,7 +2874,15 @@ async def manage_gmail_label(
         return f"Label '{label_name}' (ID: {label_id}) deleted successfully!"
 
 
-@server.tool()
+@server.tool(
+    title="List Gmail Filters",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("list_gmail_filters", is_read_only=True, service_type="gmail")
 @require_google_service("gmail", "gmail_settings_basic")
 async def list_gmail_filters(service, user_google_email: str) -> str:
@@ -2811,7 +2960,15 @@ async def list_gmail_filters(service, user_google_email: str) -> str:
     return "\n".join(lines).rstrip()
 
 
-@server.tool()
+@server.tool(
+    title="Manage Gmail Filter",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("manage_gmail_filter", service_type="gmail")
 @require_google_service("gmail", "gmail_settings_basic")
 async def manage_gmail_filter(
@@ -2880,7 +3037,15 @@ async def manage_gmail_filter(
         )
 
 
-@server.tool()
+@server.tool(
+    title="Modify Gmail Message Labels",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("modify_gmail_message_labels", service_type="gmail")
 @require_google_service("gmail", GMAIL_MODIFY_SCOPE)
 async def modify_gmail_message_labels(
@@ -2938,7 +3103,15 @@ async def modify_gmail_message_labels(
     return f"Message labels updated successfully!\nMessage ID: {message_id}\n{'; '.join(actions)}"
 
 
-@server.tool()
+@server.tool(
+    title="Batch Modify Gmail Message Labels",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("batch_modify_gmail_message_labels", service_type="gmail")
 @require_google_service("gmail", GMAIL_MODIFY_SCOPE)
 async def batch_modify_gmail_message_labels(

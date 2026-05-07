@@ -9,6 +9,8 @@ import asyncio
 import os
 from typing import Optional, Literal
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import handle_http_errors, StringList
@@ -16,7 +18,15 @@ from core.utils import handle_http_errors, StringList
 logger = logging.getLogger(__name__)
 
 
-@server.tool()
+@server.tool(
+    title="Search Custom",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("search_custom", is_read_only=True, service_type="customsearch")
 @require_google_service("customsearch", "customsearch")
 async def search_custom(
@@ -163,7 +173,15 @@ async def search_custom(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Search Engine Info",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors(
     "get_search_engine_info", is_read_only=True, service_type="customsearch"
 )

@@ -10,6 +10,8 @@ import json
 from typing import List, Optional, Dict, Any
 
 
+from mcp.types import ToolAnnotations
+
 from auth.service_decorator import require_google_service
 from core.server import server
 from core.utils import handle_http_errors
@@ -116,7 +118,15 @@ def _serialize_form_item(item: Dict[str, Any], index: int) -> Dict[str, Any]:
     return serialized_item
 
 
-@server.tool()
+@server.tool(
+    title="Create Form",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("create_form", service_type="forms")
 @require_google_service("forms", "forms")
 async def create_form(
@@ -163,7 +173,15 @@ async def create_form(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Form",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_form", is_read_only=True, service_type="forms")
 @require_google_service("forms", "forms")
 async def get_form(service, user_google_email: str, form_id: str) -> str:
@@ -227,7 +245,15 @@ async def get_form(service, user_google_email: str, form_id: str) -> str:
     return result
 
 
-@server.tool()
+@server.tool(
+    title="Set Publish Settings",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("set_publish_settings", service_type="forms")
 @require_google_service("forms", "forms")
 async def set_publish_settings(
@@ -269,7 +295,15 @@ async def set_publish_settings(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Get Form Response",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("get_form_response", is_read_only=True, service_type="forms")
 @require_google_service("forms", "forms")
 async def get_form_response(
@@ -324,7 +358,15 @@ async def get_form_response(
     return result
 
 
-@server.tool()
+@server.tool(
+    title="List Form Responses",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("list_form_responses", is_read_only=True, service_type="forms")
 @require_google_service("forms", "forms")
 async def list_form_responses(
@@ -445,7 +487,15 @@ async def _batch_update_form_impl(
     return confirmation_message
 
 
-@server.tool()
+@server.tool(
+    title="Batch Update Form",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 @handle_http_errors("batch_update_form", service_type="forms")
 @require_google_service("forms", "forms")
 async def batch_update_form(

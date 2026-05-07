@@ -80,7 +80,7 @@ _Why it matters_: prevents user‑visible 400 errors and keeps schema truthful.
 
 | Path/Pattern                          | Reason                                   |
 | ------------------------------------- | ---------------------------------------- |
-| `*.dxt`, `glama.json`, `fastmcp.json` | Deployment descriptors                   |
+| `*.mcpb`, `*.dxt`, `glama.json`, `fastmcp.json` | Deployment descriptors                   |
 | `helm-chart/**`, `Dockerfile`         | Infra packaging – reviewed separately    |
 | `tests/fixtures/**`                   | Static fixtures – only review if failing |
 

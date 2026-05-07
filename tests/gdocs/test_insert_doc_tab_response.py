@@ -224,7 +224,7 @@ async def test_populate_tab_rejects_missing_tab_when_appending():
     docs.batchUpdate.assert_not_called()
 
 
-def test_find_tab_end_index_distinguishes_non_document_tab_from_empty_document_tab():
+def test_find_tab_end_index_treats_non_document_tab_as_not_found():
     doc = {
         "tabs": [
             {"tabProperties": {"tabId": "t.container"}},
@@ -232,7 +232,7 @@ def test_find_tab_end_index_distinguishes_non_document_tab_from_empty_document_t
         ]
     }
 
-    assert docs_tools._find_tab_end_index(doc, "t.container") == 0
+    assert docs_tools._find_tab_end_index(doc, "t.container") is None
     assert docs_tools._find_tab_end_index(doc, "t.empty") == 1
 
 
