@@ -5,7 +5,7 @@ Shared utilities for Google Slides operations.
 """
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 
 from core.utils import UserInputError
 
@@ -121,7 +121,7 @@ def _get_request_payload(request: Dict[str, Any], request_type: str) -> Dict[str
 
 def _find_insert_text_targets(
     requests: List[Dict[str, Any]],
-) -> List[tuple[int, str]]:
+) -> List[Tuple[int, str]]:
     targets = []
     for index, request in enumerate(requests):
         if not isinstance(request, dict):
@@ -132,7 +132,7 @@ def _find_insert_text_targets(
     return targets
 
 
-def _find_created_slide_ids(requests: List[Dict[str, Any]]) -> set[str]:
+def _find_created_slide_ids(requests: List[Dict[str, Any]]) -> Set[str]:
     slide_ids = set()
     for request in requests:
         if not isinstance(request, dict):
@@ -143,13 +143,13 @@ def _find_created_slide_ids(requests: List[Dict[str, Any]]) -> set[str]:
     return slide_ids
 
 
-async def _get_presentation_slide_ids(service, presentation_id: str) -> set[str]:
+async def _get_presentation_slide_ids(service, presentation_id: str) -> Set[str]:
     result = await asyncio.to_thread(
         service.presentations()
         .get(
             presentationId=presentation_id,
             fields=(
-                "slides(objectId),masters(objectId),"
+                "slides(objectId,notesPage(objectId)),masters(objectId),"
                 "layouts(objectId),notesMaster(objectId)"
             ),
         )
@@ -161,6 +161,10 @@ async def _get_presentation_slide_ids(service, presentation_id: str) -> set[str]
         for page in result.get(page_type, [])
         if isinstance(page.get("objectId"), str)
     }
+    for slide in result.get("slides", []):
+        notes_id = slide.get("notesPage", {}).get("objectId")
+        if isinstance(notes_id, str):
+            page_ids.add(notes_id)
     notes_master = result.get("notesMaster")
     if isinstance(notes_master, dict) and isinstance(notes_master.get("objectId"), str):
         page_ids.add(notes_master["objectId"])
