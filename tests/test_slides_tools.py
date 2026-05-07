@@ -27,6 +27,39 @@ def _build_slides_service(presentation=None, batch_update_response=None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requests", "expected_message"),
+    [
+        ([], "requests must contain at least one request object"),
+        ([{}], "requests[0] is empty"),
+        ([{"unknownRequest": {}}], "unsupported request type 'unknownRequest'"),
+        (
+            [{"createSlide": {}, "insertText": {}}],
+            "requests[0] contains multiple fields (createSlide, insertText)",
+        ),
+        ([{"createSlide": None}], "requests[0].createSlide must be an object"),
+    ],
+)
+async def test_batch_update_rejects_invalid_request_objects(requests, expected_message):
+    service, presentations = _build_slides_service()
+
+    with pytest.raises(UserInputError) as exc_info:
+        await _unwrap(batch_update_presentation)(
+            service=service,
+            user_google_email="user@example.com",
+            presentation_id="presentation-1",
+            requests=requests,
+        )
+
+    message = str(exc_info.value)
+    assert expected_message in message
+    assert "exactly one Slides request type" in message
+    assert "createSlide" in message
+    presentations.get.assert_not_called()
+    presentations.batchUpdate.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_batch_update_rejects_insert_text_targeting_slide_id():
     service, presentations = _build_slides_service()
 
