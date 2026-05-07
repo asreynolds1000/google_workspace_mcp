@@ -586,6 +586,8 @@ async def handle_auth_callback(
     redirect_uri: str,
     credentials_base_dir: str = DEFAULT_CREDENTIALS_DIR,
     session_id: Optional[str] = None,
+    *,
+    allow_missing_state_fallback: bool = False,
     client_secrets_path: Optional[
         str
     ] = None,  # Deprecated: kept for backward compatibility
@@ -601,6 +603,9 @@ async def handle_auth_callback(
         redirect_uri: The redirect URI.
         credentials_base_dir: Base directory for credential files.
         session_id: Optional MCP session ID to associate with the credentials.
+        allow_missing_state_fallback: Whether to recover a missing callback state
+            from the most recently stored OAuth state. Only enable for local stdio
+            callbacks where there is no multi-user session context.
         client_secrets_path: (Deprecated) Path to client secrets file. Ignored if environment variables are set.
 
     Returns:
@@ -640,15 +645,20 @@ async def handle_auth_callback(
             state_info = store.validate_and_consume_oauth_state(
                 state, session_id=session_id
             )
-        elif session_id is None:
+        elif (
+            allow_missing_state_fallback
+            and os.getenv("MCP_SINGLE_USER_MODE") == "1"
+            and session_id is None
+        ):
             # stdio mode fallback: state may be absent from Google's redirect
             # (e.g. when prompt=select_account is used with revoked credentials).
             # Use the most recently stored state to recover the PKCE code_verifier.
             logger.warning(
-                "OAuth callback missing state parameter; using most recent stored state (stdio fallback)"
+                "OAuth callback missing state parameter; using most recent stored state (single-user stdio fallback)"
             )
             state_info = store.consume_latest_oauth_state(
-                initiating_session_id=session_id
+                initiating_session_id=session_id,
+                allow_any_session=True,
             )
             if not state_info:
                 raise ValueError(
