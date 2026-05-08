@@ -483,10 +483,12 @@
             "type": "null"
           }
         ],
-        "default": null
+        "default": null,
+        "description": "List of relation dicts {person, type?}.\nSupported types: spouse, child, parent, friend, manager, assistant, etc."
       },
       "relations_mode": {
         "default": "merge",
+        "description": "How to update relations on \"update\": \"merge\" (default), \"replace\", or \"remove\".",
         "enum": [
           "merge",
           "replace",
@@ -531,10 +533,12 @@
             "type": "null"
           }
         ],
-        "default": null
+        "default": null,
+        "description": "List of custom field dicts {key, value}.\nUseful for structured data like account numbers, IDs, or custom dates."
       },
       "user_defined_mode": {
         "default": "merge",
+        "description": "How to update custom fields on \"update\": \"merge\" (default), \"replace\", or \"remove\".\nmerge overrides value on matching key; new keys appended.",
         "enum": [
           "merge",
           "replace",
@@ -1262,7 +1266,7 @@
           }
         ],
         "default": null,
-        "description": "For \"update\" action \u2014 the single People API field to update across\nall contacts in this batch. Required. Must be one of: names, phoneNumbers,\nemailAddresses, organizations, nicknames, urls, biographies, addresses.\nUsing a single field per batch call prevents unintentional data loss from\na union updateMask overwriting unrelated fields."
+        "description": "For \"update\" action \u2014 the single People API field to update across\nall contacts in this batch. Required. Must be one of: names, phoneNumbers,\nemailAddresses, organizations, nicknames, urls, userDefined, relations,\nbiographies, addresses. Using a single field per batch call prevents\nunintentional data loss from a union updateMask overwriting unrelated fields."
       },
       "updates": {
         "anyOf": [

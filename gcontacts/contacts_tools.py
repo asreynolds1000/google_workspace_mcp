@@ -1250,6 +1250,10 @@ async def manage_contact(
             Supported types: default, alternate_name, maiden_name, initials, other, etc.
         urls (Optional[List[Dict]]): List of URL dicts {value, type?}.
             Supported types: homepage, blog, profile, work, ftp, reservations, other, etc.
+        user_defined (Optional[List[Dict]]): List of custom field dicts {key, value}.
+            Useful for structured data like account numbers, IDs, or custom dates.
+        relations (Optional[List[Dict]]): List of relation dicts {person, type?}.
+            Supported types: spouse, child, parent, friend, manager, assistant, etc.
         notes (Optional[str]): Additional notes (for create/update).
         address (Optional[str]): Street address (for create/update).
         phones_mode (str): How to update phones on "update": "merge" (default), "replace", or "remove".
@@ -1261,6 +1265,9 @@ async def manage_contact(
         nicknames_mode (str): How to update nicknames on "update": "merge" (default), "replace", or "remove".
         urls_mode (str): How to update urls on "update": "merge" (default), "replace", or "remove".
             merge dedups by normalized URL (lowercased, trailing slash stripped).
+        user_defined_mode (str): How to update custom fields on "update": "merge" (default), "replace", or "remove".
+            merge overrides value on matching key; new keys appended.
+        relations_mode (str): How to update relations on "update": "merge" (default), "replace", or "remove".
         phone (Optional[str]): [DEPRECATED] Single phone number. Use phones=[{"number":..., "type":"mobile"}].
         email (Optional[str]): [DEPRECATED] Email address. Use emails=[{"address":..., "type":"other"}].
         organization (Optional[str]): [DEPRECATED] Company name. Use organizations=[{"name":...}].
@@ -1693,9 +1700,9 @@ async def manage_contacts_batch(
         contact_ids (Optional[List[str]]): List of contact IDs for "delete" action.
         field (str): For "update" action — the single People API field to update across
             all contacts in this batch. Required. Must be one of: names, phoneNumbers,
-            emailAddresses, organizations, nicknames, urls, biographies, addresses.
-            Using a single field per batch call prevents unintentional data loss from
-            a union updateMask overwriting unrelated fields.
+            emailAddresses, organizations, nicknames, urls, userDefined, relations,
+            biographies, addresses. Using a single field per batch call prevents
+            unintentional data loss from a union updateMask overwriting unrelated fields.
 
     Returns:
         str: Result of the batch action performed.
