@@ -1,5 +1,7 @@
 import errno
 
+from starlette.testclient import TestClient
+
 from auth import oauth_callback_server
 
 
@@ -138,3 +140,37 @@ def test_ensure_oauth_callback_skips_start_when_other_instance_owns_port(monkeyp
     assert error == ""
     assert len(_PortInUseServer.instances) == 1
     assert _PortInUseServer.instances[0].start_calls == 0
+
+
+def test_oauth_callback_missing_state_fallback_follows_single_user_mode(monkeypatch):
+    calls = []
+
+    async def fake_handle_auth_callback(**kwargs):
+        calls.append(kwargs)
+        return "user@example.com", object()
+
+    monkeypatch.setattr(oauth_callback_server, "check_client_secrets", lambda: None)
+    monkeypatch.setattr(oauth_callback_server, "get_current_scopes", lambda: ["scope"])
+    monkeypatch.setattr(
+        oauth_callback_server,
+        "get_oauth_redirect_uri",
+        lambda: "http://localhost:8000/oauth2callback",
+    )
+    monkeypatch.setattr(
+        oauth_callback_server,
+        "handle_auth_callback",
+        fake_handle_auth_callback,
+    )
+
+    monkeypatch.delenv("MCP_SINGLE_USER_MODE", raising=False)
+    server = oauth_callback_server.MinimalOAuthServer(8000, "http://localhost")
+    response = TestClient(server.app).get("/oauth2callback?code=code123")
+
+    assert response.status_code == 200
+    assert calls[-1]["allow_missing_state_fallback"] is False
+
+    monkeypatch.setenv("MCP_SINGLE_USER_MODE", "1")
+    response = TestClient(server.app).get("/oauth2callback?code=code123")
+
+    assert response.status_code == 200
+    assert calls[-1]["allow_missing_state_fallback"] is True
