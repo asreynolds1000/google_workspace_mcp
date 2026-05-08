@@ -99,9 +99,14 @@ class TestCoerceUserDefinedInput:
         original = UserDefinedInput(key="K", value="V")
         assert _coerce_user_defined_input(original) is original
 
-    def test_requires_both_key_and_value(self):
-        with pytest.raises(ValidationError):
-            _coerce_user_defined_input({"key": "Only Key"})
+    def test_key_only_accepted_for_remove(self):
+        """value defaults to '' so key-only dicts work for remove mode."""
+        result = _coerce_user_defined_input({"key": "Only Key"})
+        assert isinstance(result, UserDefinedInput)
+        assert result.key == "Only Key"
+        assert result.value == ""
+
+    def test_requires_key(self):
         with pytest.raises(ValidationError):
             _coerce_user_defined_input({"value": "Only Value"})
 

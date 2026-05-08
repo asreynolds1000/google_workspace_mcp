@@ -149,7 +149,8 @@ class UserDefinedInput(BaseModel):
         description="Custom field key (e.g. 'ID', 'Hebrew Birthday', 'Account Number').",
     )
     value: str = Field(
-        description="Custom field value.",
+        default="",
+        description="Custom field value. May be omitted when using remove mode (only the key is needed).",
     )
 
 
@@ -679,9 +680,12 @@ def _build_person_body(
         for ud in user_defined:
             key = (ud.key or "").strip()
             value = (ud.value or "").strip()
-            if not key or not value:
+            if not key:
                 continue
-            ud_entries.append({"key": key, "value": value})
+            entry: Dict[str, str] = {"key": key}
+            if value:
+                entry["value"] = value
+            ud_entries.append(entry)
         body["userDefined"] = ud_entries
 
     # --- Relations ---
