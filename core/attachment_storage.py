@@ -163,7 +163,8 @@ class AttachmentStorage:
         expires_at = datetime.now() + timedelta(seconds=self.expiration_seconds)
         self._metadata[file_id] = {
             "file_path": str(file_path),
-            "filename": filename or f"attachment{extension}",
+            "filename": save_name,
+            "original_filename": filename,
             "mime_type": mime_type or "application/octet-stream",
             "size": len(file_bytes),
             "created_at": datetime.now(),

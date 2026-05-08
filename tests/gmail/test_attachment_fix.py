@@ -112,6 +112,25 @@ def test_save_attachment_sanitizes_windows_reserved_filenames(
     assert saved_bytes == payload
 
 
+def test_save_attachment_metadata_filename_matches_saved_file(isolated_storage):
+    """Attachment metadata should report the on-disk filename."""
+    payload = b"metadata filename check"
+    b64_data = base64.urlsafe_b64encode(payload).decode()
+
+    result = isolated_storage.save_attachment(
+        b64_data, filename="RE: Foo?.eml", mime_type="message/rfc822"
+    )
+    saved_name = os.path.basename(result.path)
+    metadata = isolated_storage.get_attachment_metadata(result.file_id)
+
+    assert metadata["filename"] == saved_name
+    assert metadata["original_filename"] == "RE: Foo?.eml"
+    assert metadata["filename"].startswith("RE_ Foo_")
+    assert metadata["filename"].endswith(".eml")
+    assert ":" not in metadata["filename"]
+    assert "?" not in metadata["filename"]
+
+
 @pytest.mark.parametrize(
     "payload",
     [
