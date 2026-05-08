@@ -1794,11 +1794,13 @@ async def get_gmail_attachment_content(
         result = storage.save_attachment(
             base64_data=base64_data, filename=filename, mime_type=mime_type
         )
+        saved_filename = Path(result.path).name
 
         result_lines = [
             "Attachment downloaded successfully!",
             f"Message ID: {message_id}",
             f"Filename: {filename or 'unknown'}",
+            f"Saved filename: {saved_filename}",
             f"Size: {size_kb:.1f} KB ({size_bytes} bytes)",
         ]
 
