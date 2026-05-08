@@ -285,7 +285,10 @@ class TestFormatContactUserDefined:
         result = _format_contact(person, detailed=True)
         assert "  - ok: yes" in result
         # The two empty entries shouldn't render
-        assert ": v" not in result.split("Custom Fields:")[1].split("\n")[0]
+        lines = result.split("Custom Fields:")[1].splitlines()
+        custom_field_lines = [line for line in lines if line.strip()]
+        assert not any(": v" in line for line in custom_field_lines)
+        assert not any(line.startswith("  - k:") for line in custom_field_lines)
 
 
 class TestFormatContactRelations:
@@ -575,6 +578,12 @@ class TestMergeRelations:
         result = _merge_relations(existing, new, "merge")
         assert len(result) == 2
 
+    def test_merge_keeps_same_person_with_different_formatted_type(self):
+        existing = [{"person": "Jane Doe", "type": "custom", "formattedType": "Aunt"}]
+        new = [{"person": "Jane Doe", "type": "custom", "formattedType": "Mentor"}]
+        result = _merge_relations(existing, new, "merge")
+        assert len(result) == 2
+
     def test_merge_no_type_treated_as_distinct(self):
         existing = [{"person": "Jane Doe", "type": "spouse"}]
         new = [{"person": "Jane Doe"}]  # no type
@@ -603,6 +612,20 @@ class TestMergeRelations:
             existing, [{"person": "JANE DOE", "type": "SPOUSE"}], "remove"
         )
         assert result == []
+
+    def test_remove_uses_formatted_type(self):
+        existing = [
+            {"person": "Jane Doe", "type": "custom", "formattedType": "Aunt"},
+            {"person": "Jane Doe", "type": "custom", "formattedType": "Mentor"},
+        ]
+        result = _merge_relations(
+            existing,
+            [{"person": "JANE DOE", "type": "custom", "formattedType": " aunt "}],
+            "remove",
+        )
+        assert result == [
+            {"person": "Jane Doe", "type": "custom", "formattedType": "Mentor"}
+        ]
 
 
 # =============================================================================

@@ -947,9 +947,10 @@ def _merge_relations(
     """
 
     def relation_key(rel: Dict[str, Any]) -> tuple[str, str]:
+        label = rel.get("formattedType") or rel.get("type") or ""
         return (
             _normalize_relation_person(rel.get("person", "")),
-            (rel.get("type") or "").strip().lower(),
+            label.strip().lower(),
         )
 
     if mode == "replace":
