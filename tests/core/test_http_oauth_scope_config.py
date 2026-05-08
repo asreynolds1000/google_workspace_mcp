@@ -197,6 +197,4 @@ def test_configure_server_for_http_passes_jwt_key_to_external_provider(monkeypat
     assert isinstance(captured["jwt_signing_key"], bytes), (
         "jwt_signing_key must be a bytes object"
     )
-    assert len(captured["jwt_signing_key"]) > 0, (
-        "jwt_signing_key must be non-empty"
-    )
+    assert len(captured["jwt_signing_key"]) > 0, "jwt_signing_key must be non-empty"
